@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Методика занятий — анализ иерархий (AHP)</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "chart.js/auto": "/vendor/chart.js/auto/auto.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <h1>Подбор методики преподавания (AHP)</h1>
+        <div class="subtitle">
+          Структура: авторизация → ученик → оценки уроков → подготовка данных → анализ → рекомендация
+        </div>
+      </div>
+      <nav class="nav hidden" id="main-nav">
+        <button type="button" data-view="students">Ученики</button>
+        <button type="button" data-view="analysis">Анализ</button>
+        <button type="button" data-view="settings">Правила</button>
+        <button type="button" class="btn-secondary" id="btn-logout">Выход</button>
+      </nav>
+    </header>
+
+    <main>
+      <section id="view-auth" class="panel">
+        <h2>Авторизация</h2>
+        <p class="flow-hint">
+          Бэкенд на Node.js: учётные записи и данные хранятся на сервере (файл <code>data/store.json</code>). Создайте
+          аккаунт или войдите.
+        </p>
+        <div id="auth-msg"></div>
+        <div class="row">
+          <div>
+            <label for="login-user">Логин</label>
+            <input type="text" id="login-user" autocomplete="username" />
+          </div>
+          <div>
+            <label for="login-pass">Пароль</label>
+            <input type="password" id="login-pass" autocomplete="current-password" />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-login">Войти</button>
+        <button class="btn btn-secondary" id="btn-register">Регистрация</button>
+      </section>
+
+      <section id="view-students" class="panel hidden">
+        <h2>Ведение данных об ученике</h2>
+        <p class="flow-hint">
+          Ввод ФИО и заметок; хранение в базе на сервере. Далее — оценки по урокам (критерии из настроек).
+        </p>
+        <div class="row">
+          <div>
+            <label for="new-student-name">Имя ученика</label>
+            <input type="text" id="new-student-name" placeholder="Например, Иван" />
+          </div>
+          <div>
+            <label for="new-student-notes">Заметки (необязательно)</label>
+            <input type="text" id="new-student-notes" placeholder="Класс, особенности" />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-add-student">Добавить ученика</button>
+
+        <h3 style="margin-top: 1.5rem; font-size: 1rem">Список учеников</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Уроков</th>
+                <th>Действия</th>
+              </tr>
+            </thead>
+            <tbody id="students-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-student-detail" class="panel hidden">
+        <h2 id="student-detail-title">Ученик</h2>
+        <p class="flow-hint" id="student-detail-hint"></p>
+        <input type="hidden" id="current-student-id" />
+        <button class="btn btn-secondary" id="btn-back-students">← К списку учеников</button>
+
+        <div id="student-radar-wrap" class="radar-wrap hidden">
+          <h3 class="settings-subtitle">Профиль успеваемости (радар)</h3>
+          <p class="diagram-ref">
+            Средние баллы по критериям по всем занятиям (шкала 2–5). Наибольшие значения на лучах выделены синим, как на
+            контрольной диаграмме.
+          </p>
+          <div class="radar-canvas-box">
+            <canvas id="student-radar-chart" aria-label="Радар успеваемости по критериям"></canvas>
+          </div>
+        </div>
+
+        <h3 style="margin-top: 1.25rem; font-size: 1rem">Оценки по урокам (2–5)</h3>
+        <p class="diagram-ref">
+          Укажите дату занятия и баллы по каждому критерию по шкале 2–5; записи сохраняются на сервере в карточке ученика.
+        </p>
+        <div class="row lesson-date-row">
+          <div>
+            <label for="lesson-date">Дата занятия</label>
+            <input type="date" id="lesson-date" />
+          </div>
+        </div>
+        <div id="lesson-scores-inputs" class="row" style="flex-direction: column; align-items: stretch"></div>
+        <button class="btn btn-primary" id="btn-add-lesson">Добавить запись урока</button>
+
+        <div class="table-wrap" style="margin-top: 1rem">
+          <table class="lessons-table">
+            <thead id="lessons-thead"></thead>
+            <tbody id="lessons-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="view-analysis" class="panel hidden">
+        <h2>Запрос анализа и рекомендация</h2>
+        <p class="flow-hint">
+          Анализ оценок выполняется по <strong>даталогической модели</strong> (какие данные связаны) и
+          <strong>функциональной модели</strong> (какие функции преобразуют данные по шагам).
+        </p>
+
+        <details class="analysis-models" id="analysis-models-block">
+          <summary>Даталогическая и функциональная модель</summary>
+          <div class="model-columns">
+            <div class="model-card">
+              <h3 class="model-card-title">Даталогическая модель</h3>
+              <p class="diagram-ref">Сущности и связи (концептуальный уровень).</p>
+              <ul id="data-logical-list" class="model-list"></ul>
+            </div>
+            <div class="model-card">
+              <h3 class="model-card-title">Функциональная модель</h3>
+              <p class="diagram-ref">Поток обработки от оценок до рекомендации.</p>
+              <ol id="functional-model-list" class="model-list model-list-numbered"></ol>
+            </div>
+          </div>
+        </details>
+
+        <div class="row">
+          <div>
+            <label for="analysis-student">Ученик</label>
+            <select id="analysis-student"></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-run-analysis">Сформировать запрос и выполнить анализ</button>
+        <div id="analysis-result"></div>
+      </section>
+
+      <section id="view-settings" class="panel hidden">
+        <h2>Правила: критерии, методики, оценки</h2>
+        <p class="flow-hint">
+          <strong>Важность критерия</strong> (2–5) — что для вас важнее при выборе методики.
+          <strong>Подходит</strong> в таблице — насколько данная методика хорошо закрывает критерий (2–5). Числа
+          переводятся в веса автоматически.
+        </p>
+
+        <h3 class="settings-subtitle">Критерии</h3>
+        <div id="criteria-list" class="settings-list"></div>
+        <button type="button" class="btn btn-secondary" id="btn-add-criterion">+ Критерий</button>
+
+        <h3 class="settings-subtitle">Методики</h3>
+        <div id="methods-list" class="settings-list"></div>
+        <button type="button" class="btn btn-secondary" id="btn-add-method">+ Методика</button>
+
+        <h3 class="settings-subtitle">Насколько методика подходит под критерий (2–5)</h3>
+        <p class="diagram-ref">Строка — методика, столбец — критерий.</p>
+        <div class="table-wrap settings-score-wrap">
+          <table class="settings-score-table" id="method-scores-table">
+            <thead id="method-scores-thead"></thead>
+            <tbody id="method-scores-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="row" style="margin-top: 1rem">
+          <button class="btn btn-secondary" id="btn-export-json">Экспорт настроек (JSON)</button>
+          <button class="btn btn-secondary" id="btn-import-json">Импорт из файла</button>
+          <input type="file" id="import-file" accept="application/json" class="hidden" />
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      Запуск: <code>npm install</code> и <code>npm start</code> — сервер отдаёт интерфейс и API. Данные: папка
+      <code>data/</code>.
+    </footer>
+
+    <!-- Глобальный Chart.js: без ES-модулей графики не зависят от import map / dynamic import -->
+    <script src="/vendor/chart.js/dist/chart.umd.js"></script>
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
