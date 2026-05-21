@@ -374,16 +374,45 @@
             </section>
 
             <section id="view-analysis" class="view-section hidden">
-              <div class="card panel">
-                <div class="panel-header">
-                  <h2>Анализ и рекомендация</h2>
-                  <p class="panel-desc">
-                    Расчёт по даталогической и функциональной модели (F1–F6).
-                  </p>
+              <div class="card panel analysis-page">
+                <div class="analysis-hero">
+                  <div class="analysis-hero-text">
+                    <h2>Анализ и рекомендация</h2>
+                    <p class="panel-desc">Подбор методики преподавания по оценкам ученика (модель F1–F6, шкала 2–5)</p>
+                  </div>
+                  <div class="analysis-hero-badge" aria-hidden="true">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6" />
+                    </svg>
+                  </div>
                 </div>
 
+                <div class="analysis-query-card">
+                  <div class="analysis-query-fields">
+                    <div class="form-field">
+                      <label for="analysis-student">Ученик для анализа</label>
+                      <select id="analysis-student"></select>
+                    </div>
+                    <button class="btn btn-primary" id="btn-run-analysis">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14M13 6l6 6-6 6" />
+                      </svg>
+                      Выполнить анализ
+                    </button>
+                  </div>
+                  <p class="form-hint">Выберите ученика с хотя бы одним уроком и нажмите кнопку — система рассчитает приоритеты методик</p>
+                </div>
+
+                <div id="analysis-empty" class="analysis-empty">
+                  <div class="analysis-empty-icon" aria-hidden="true">📊</div>
+                  <p class="analysis-empty-title">Результат появится здесь</p>
+                  <p class="analysis-empty-desc">После анализа вы увидите рекомендуемую методику, рейтинг и диаграмму</p>
+                </div>
+
+                <div id="analysis-result" class="analysis-result hidden"></div>
+
                 <details class="analysis-models" id="analysis-models-block">
-                  <summary>Даталогическая и функциональная модель</summary>
+                  <summary>Справка: даталогическая и функциональная модель</summary>
                   <div class="model-columns">
                     <div class="model-card">
                       <h3 class="model-card-title">Даталогическая модель</h3>
@@ -397,15 +426,6 @@
                     </div>
                   </div>
                 </details>
-
-                <div class="form-row">
-                  <div class="form-field">
-                    <label for="analysis-student">Ученик</label>
-                    <select id="analysis-student"></select>
-                  </div>
-                  <button class="btn btn-primary" id="btn-run-analysis">Выполнить анализ</button>
-                </div>
-                <div id="analysis-result"></div>
               </div>
             </section>
 

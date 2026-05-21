@@ -1303,18 +1303,36 @@ function fillAnalysisModelListsOnce() {
   }
 }
 
+function setAnalysisEmptyVisible(visible) {
+  document.getElementById("analysis-empty")?.classList.toggle("hidden", !visible);
+  const result = document.getElementById("analysis-result");
+  if (result && visible) {
+    result.classList.add("hidden");
+    result.innerHTML = "";
+  }
+}
+
+function confidenceLabel(margin) {
+  const pct = margin * 100;
+  if (pct >= 15) return "Высокая";
+  if (pct >= 8) return "Средняя";
+  return "Низкая";
+}
+
 function renderAnalysisForm() {
   fillAnalysisModelListsOnce();
   destroyAnalysisRadarChart();
   const sel = document.getElementById("analysis-student");
-  sel.innerHTML = `<option value="">— выберите —</option>`;
+  sel.innerHTML = `<option value="">— выберите ученика —</option>`;
   for (const s of state.students) {
     const o = document.createElement("option");
     o.value = s.id;
-    o.textContent = `${s.name} (${s.lessons?.length ?? 0} урок.)`;
+    const n = s.lessons?.length ?? 0;
+    o.textContent = `${s.name} · ${n} ${n === 1 ? "урок" : n >= 2 && n <= 4 ? "урока" : "уроков"}`;
+    if (!n) o.disabled = true;
     sel.appendChild(o);
   }
-  document.getElementById("analysis-result").innerHTML = "";
+  setAnalysisEmptyVisible(true);
 }
 
 function renderAnalysisResult(student, beta) {
@@ -1331,28 +1349,102 @@ function renderAnalysisResult(student, beta) {
   });
 
   const bestMethod = state.methods[bestIdx];
+  const confidence = confidenceLabel(marginFirstSecond);
+  const maxPriority = Math.max(...global, 0.001);
 
-  let html = `<div class="result-card">`;
-  html += `<h3>Рекомендация</h3>`;
-  html += `<p class="lead">Предпочтительная методика: ${escapeHtml(bestMethod.name)}</p>`;
-  html += `<p style="font-size:0.9rem;color:var(--muted)">Расчёт по функциональной модели (F1–F6). Правила: шкала ${SCORE_MIN}–${SCORE_MAX}. Уроков в расчёте: ${lessons.length}.</p>`;
+  const ranked = state.methods
+    .map((m, i) => ({ name: m.name, priority: global[i], isBest: i === bestIdx }))
+    .sort((a, b) => b.priority - a.priority);
 
-  html += `<p class="diagram-ref" style="margin-top:0.75rem;margin-bottom:0.35rem">Сравнение методик по доле итогового приоритета (%), радар (как визуализация успеваемости):</p>`;
-  html += `<div class="analysis-radar-wrap radar-canvas-box"><canvas id="analysis-method-radar" aria-label="Радар приоритетов методик"></canvas></div>`;
+  const rankHtml = ranked
+    .map(
+      (m) => `
+    <li class="method-rank-item${m.isBest ? " is-best" : ""}">
+      <div class="method-rank-head">
+        <span class="method-rank-name">${escapeHtml(m.name)}${m.isBest ? " ★" : ""}</span>
+        <span class="method-rank-pct">${(m.priority * 100).toFixed(1)}%</span>
+      </div>
+      <div class="method-rank-track">
+        <div class="method-rank-fill" style="width:${((m.priority / maxPriority) * 100).toFixed(1)}%"></div>
+      </div>
+    </li>`
+    )
+    .join("");
 
-  html += `<details style="margin-top:1rem;font-size:0.85rem;color:var(--muted)"><summary>Показать детали расчёта</summary>`;
-  html += `<p><strong>Веса критериев (по важности ${SCORE_MIN}–${SCORE_MAX}):</strong> ${state.criteria.map((c, i) => `${escapeHtml(c.name)}: ${(baseW[i] * 100).toFixed(1)}%`).join("; ")}</p>`;
-  html += `<p><strong>После учёта слабых сторон:</strong> ${state.criteria.map((c, i) => `${escapeHtml(c.name)}: ${(wAdj[i] * 100).toFixed(1)}%`).join("; ")}</p>`;
-  html += `<p><strong>Уровень по урокам (0–1, из оценок ${SCORE_MIN}–${SCORE_MAX}):</strong> ${state.criteria.map((c, i) => `${escapeHtml(c.name)}: ${(perf[i] ?? 0).toFixed(2)}`).join("; ")}</p>`;
-  html += `<p><strong>Уверенность рекомендации (разрыв 1-го и 2-го приоритета):</strong> ${(marginFirstSecond * 100).toFixed(2)} п.п.</p>`;
-  html += `<dl class="step-trace">`;
-  steps.forEach((s) => {
-    html += `<dt>${escapeHtml(s.id)} — ${escapeHtml(s.title)}</dt><dd>${escapeHtml(s.input)} → ${escapeHtml(s.output)}</dd>`;
-  });
-  html += `</dl>`;
-  html += `</details></div>`;
+  const criteriaMetrics = state.criteria
+    .map(
+      (c, i) => `
+    <div class="analysis-metric">
+      ${escapeHtml(c.name)}
+      <strong>${(perf[i] ?? 0).toFixed(2)}</strong>
+      <span class="diagram-ref">уровень 0–1</span>
+    </div>`
+    )
+    .join("");
+
+  const pipelineHtml = steps
+    .map(
+      (s) => `
+    <li>
+      <div class="analysis-pipeline-step">${escapeHtml(s.id)} — ${escapeHtml(s.title)}</div>
+      <div class="analysis-pipeline-io">${escapeHtml(s.input)} → ${escapeHtml(s.output)}</div>
+    </li>`
+    )
+    .join("");
+
+  let html = `
+    <div class="analysis-recommendation">
+      <div class="analysis-recommendation-label">Рекомендуемая методика</div>
+      <p class="analysis-recommendation-method">${escapeHtml(bestMethod.name)}</p>
+      <div class="analysis-recommendation-meta">
+        <span class="analysis-meta-chip">Ученик: <strong>${escapeHtml(student.name)}</strong></span>
+        <span class="analysis-meta-chip">Уроков: <strong>${lessons.length}</strong></span>
+        <span class="analysis-meta-chip">Уверенность: <strong>${confidence}</strong></span>
+      </div>
+    </div>
+
+    <div class="analysis-stats-grid">
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Приоритет лидера</span>
+        <span class="analysis-stat-value">${(global[bestIdx] * 100).toFixed(1)}%</span>
+        <span class="analysis-stat-caption">доля итогового веса</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Разрыв с 2-м местом</span>
+        <span class="analysis-stat-value">${(marginFirstSecond * 100).toFixed(1)}</span>
+        <span class="analysis-stat-caption">процентных пунктов</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Шкала оценок</span>
+        <span class="analysis-stat-value">${SCORE_MIN}–${SCORE_MAX}</span>
+        <span class="analysis-stat-caption">критерии и уроки</span>
+      </div>
+    </div>
+
+    <div class="analysis-grid-2">
+      <div class="analysis-card">
+        <h3 class="analysis-card-title">Рейтинг методик</h3>
+        <ul class="method-rank-list">${rankHtml}</ul>
+      </div>
+      <div class="analysis-card analysis-radar-card">
+        <h3 class="analysis-card-title">Доли приоритетов (радар)</h3>
+        <div class="analysis-radar-wrap radar-canvas-box">
+          <canvas id="analysis-method-radar" aria-label="Радар приоритетов методик"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <details class="analysis-details">
+      <summary>Детали расчёта (F1–F6)</summary>
+      <p class="diagram-ref" style="margin-top:0.75rem">Уровень успеваемости по критериям:</p>
+      <div class="analysis-metrics-grid">${criteriaMetrics}</div>
+      <p class="diagram-ref">Веса критериев: ${state.criteria.map((c, i) => `${escapeHtml(c.name)} ${(baseW[i] * 100).toFixed(1)}% → ${(wAdj[i] * 100).toFixed(1)}%`).join(" · ")}</p>
+      <ul class="analysis-pipeline">${pipelineHtml}</ul>
+    </details>`;
 
   const host = document.getElementById("analysis-result");
+  setAnalysisEmptyVisible(false);
+  host.classList.remove("hidden");
   host.innerHTML = html;
   requestAnimationFrame(() => {
     const canvas = document.getElementById("analysis-method-radar");
@@ -1368,14 +1460,23 @@ document.getElementById("btn-run-analysis").addEventListener("click", () => {
   const student = state.students.find((x) => x.id === sid);
   if (!student) {
     destroyAnalysisRadarChart();
-    document.getElementById("analysis-result").innerHTML =
-      '<p class="msg error">Выберите ученика.</p>';
+    setAnalysisEmptyVisible(false);
+    const host = document.getElementById("analysis-result");
+    host.classList.remove("hidden");
+    host.innerHTML = '<p class="msg error analysis-alert">Выберите ученика из списка.</p>';
     return;
   }
   if (!student.lessons?.length) {
     destroyAnalysisRadarChart();
-    document.getElementById("analysis-result").innerHTML =
-      '<p class="msg error">Нет данных уроков. Добавьте оценки в карточке ученика.</p>';
+    setAnalysisEmptyVisible(false);
+    const host = document.getElementById("analysis-result");
+    host.classList.remove("hidden");
+    host.innerHTML =
+      '<p class="msg error analysis-alert">Нет данных уроков. <a href="#" id="analysis-goto-student">Открыть карточку ученика</a> и добавить оценки.</p>';
+    document.getElementById("analysis-goto-student")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      openStudent(student.id);
+    });
     return;
   }
   renderAnalysisResult(student, BETA_WEIGHT_ADJUST);
