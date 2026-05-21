@@ -1,0 +1,6 @@
+#!/bin/sh
+# Убираем автоматический Co-authored-by от Cursor — в истории только MBL15.
+msg_file="$1"
+grep -v '^Co-authored-by: Cursor <cursoragent@cursor.com>$' "$msg_file" > "${msg_file}.tmp"
+mv "${msg_file}.tmp" "$msg_file"
+exit 0
