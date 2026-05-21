@@ -3,7 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Методика занятий — анализ иерархий (AHP)</title>
+    <title>Методика занятий — AHP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="css/styles.css" />
     <script type="importmap">
       {
@@ -14,185 +20,415 @@
     </script>
   </head>
   <body>
-    <header class="app-header">
-      <div>
-        <h1>Подбор методики преподавания (AHP)</h1>
-        <div class="subtitle">
-          Структура: авторизация → ученик → оценки уроков → подготовка данных → анализ → рекомендация
+    <!-- Экран авторизации -->
+    <div class="auth-screen" id="view-auth">
+      <div class="auth-card card">
+        <div class="auth-brand">
+          <span class="brand-icon" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <rect width="28" height="28" rx="8" fill="#1a1a1a" />
+              <path d="M8 14h12M14 8v12" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </span>
+          <div>
+            <h1>Методика AHP</h1>
+            <p class="auth-subtitle">Подбор методики преподавания</p>
+          </div>
         </div>
-      </div>
-      <nav class="nav hidden" id="main-nav">
-        <button type="button" data-view="students">Ученики</button>
-        <button type="button" data-view="analysis">Анализ</button>
-        <button type="button" data-view="settings">Правила</button>
-        <button type="button" class="btn-secondary" id="btn-logout">Выход</button>
-      </nav>
-    </header>
-
-    <main>
-      <section id="view-auth" class="panel">
-        <h2>Авторизация</h2>
+        <h2>Вход в систему</h2>
         <p class="flow-hint">
-          Бэкенд на Node.js: учётные записи и данные хранятся на сервере (файл <code>data/store.json</code>). Создайте
-          аккаунт или войдите.
+          Создайте аккаунт или войдите. Данные хранятся на сервере.
         </p>
         <div id="auth-msg"></div>
-        <div class="row">
+        <div class="form-stack">
           <div>
             <label for="login-user">Логин</label>
-            <input type="text" id="login-user" autocomplete="username" />
+            <input type="text" id="login-user" autocomplete="username" placeholder="Ваш логин" />
           </div>
           <div>
             <label for="login-pass">Пароль</label>
-            <input type="password" id="login-pass" autocomplete="current-password" />
+            <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••" />
           </div>
         </div>
-        <button class="btn btn-primary" id="btn-login">Войти</button>
-        <button class="btn btn-secondary" id="btn-register">Регистрация</button>
-      </section>
-
-      <section id="view-students" class="panel hidden">
-        <h2>Ведение данных об ученике</h2>
-        <p class="flow-hint">
-          Ввод ФИО и заметок; хранение в базе на сервере. Далее — оценки по урокам (критерии из настроек).
-        </p>
-        <div class="row">
-          <div>
-            <label for="new-student-name">Имя ученика</label>
-            <input type="text" id="new-student-name" placeholder="Например, Иван" />
-          </div>
-          <div>
-            <label for="new-student-notes">Заметки (необязательно)</label>
-            <input type="text" id="new-student-notes" placeholder="Класс, особенности" />
-          </div>
+        <div class="auth-actions">
+          <button class="btn btn-primary" id="btn-login">Войти</button>
+          <button class="btn btn-secondary" id="btn-register">Регистрация</button>
         </div>
-        <button class="btn btn-primary" id="btn-add-student">Добавить ученика</button>
+      </div>
+    </div>
 
-        <h3 style="margin-top: 1.5rem; font-size: 1rem">Список учеников</h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Имя</th>
-                <th>Уроков</th>
-                <th>Действия</th>
-              </tr>
-            </thead>
-            <tbody id="students-tbody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="view-student-detail" class="panel hidden">
-        <h2 id="student-detail-title">Ученик</h2>
-        <p class="flow-hint" id="student-detail-hint"></p>
-        <input type="hidden" id="current-student-id" />
-        <button class="btn btn-secondary" id="btn-back-students">← К списку учеников</button>
-
-        <div id="student-radar-wrap" class="radar-wrap hidden">
-          <h3 class="settings-subtitle">Профиль успеваемости (радар)</h3>
-          <p class="diagram-ref">
-            Средние баллы по критериям по всем занятиям (шкала 2–5). Наибольшие значения на лучах выделены синим, как на
-            контрольной диаграмме.
-          </p>
-          <div class="radar-canvas-box">
-            <canvas id="student-radar-chart" aria-label="Радар успеваемости по критериям"></canvas>
-          </div>
+    <!-- Основной интерфейс -->
+    <div class="app-shell hidden" id="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-logo">
+          <button type="button" class="sidebar-logo-btn" id="btn-sidebar-home" aria-label="На главную">
+            <span class="brand-icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 28 28" fill="none">
+                <rect width="28" height="28" rx="8" fill="#1a1a1a" />
+                <path d="M8 14h12M14 8v12" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </span>
+            <span class="brand-name">AHP</span>
+          </button>
         </div>
 
-        <h3 style="margin-top: 1.25rem; font-size: 1rem">Оценки по урокам (2–5)</h3>
-        <p class="diagram-ref">
-          Укажите дату занятия и баллы по каждому критерию по шкале 2–5; записи сохраняются на сервере в карточке ученика.
-        </p>
-        <div class="row lesson-date-row">
-          <div>
-            <label for="lesson-date">Дата занятия</label>
-            <input type="date" id="lesson-date" />
-          </div>
+        <nav class="sidebar-nav" id="main-nav">
+          <button type="button" class="nav-item active" data-view="home">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
+              <path d="M9 21V12h6v9" />
+            </svg>
+            Главная
+          </button>
+          <button type="button" class="nav-item" data-view="students">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="8" r="4" />
+              <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+            Ученики
+          </button>
+          <button type="button" class="nav-item" data-view="analysis">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6" />
+            </svg>
+            Анализ
+          </button>
+          <button type="button" class="nav-item" data-view="settings">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+            </svg>
+            Правила
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <p class="sidebar-footer-label">Справка</p>
+          <button type="button" class="sidebar-link" id="btn-help-docs">Документация</button>
+          <button type="button" class="sidebar-link" id="btn-help-faq">Частые вопросы</button>
         </div>
-        <div id="lesson-scores-inputs" class="row" style="flex-direction: column; align-items: stretch"></div>
-        <button class="btn btn-primary" id="btn-add-lesson">Добавить запись урока</button>
+      </aside>
 
-        <div class="table-wrap" style="margin-top: 1rem">
-          <table class="lessons-table">
-            <thead id="lessons-thead"></thead>
-            <tbody id="lessons-tbody"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="view-analysis" class="panel hidden">
-        <h2>Запрос анализа и рекомендация</h2>
-        <p class="flow-hint">
-          Анализ оценок выполняется по <strong>даталогической модели</strong> (какие данные связаны) и
-          <strong>функциональной модели</strong> (какие функции преобразуют данные по шагам).
-        </p>
-
-        <details class="analysis-models" id="analysis-models-block">
-          <summary>Даталогическая и функциональная модель</summary>
-          <div class="model-columns">
-            <div class="model-card">
-              <h3 class="model-card-title">Даталогическая модель</h3>
-              <p class="diagram-ref">Сущности и связи (концептуальный уровень).</p>
-              <ul id="data-logical-list" class="model-list"></ul>
+      <div class="app-body">
+        <header class="topbar">
+          <button type="button" class="pill-btn pill-accent" id="btn-onboarding">
+            <span>Первые шаги</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12h14M13 6l6 6-6 6" />
+            </svg>
+          </button>
+          <div class="topbar-actions">
+            <button type="button" class="btn btn-dark btn-sm" id="btn-logout">Выход</button>
+            <div class="dropdown-wrap">
+              <button type="button" class="icon-btn" id="btn-notifications" aria-label="Уведомления" aria-expanded="false">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
+                </svg>
+                <span class="notif-badge hidden" id="notif-badge">0</span>
+              </button>
+              <div class="dropdown-panel hidden" id="notifications-panel">
+                <div class="dropdown-header">Уведомления</div>
+                <div class="dropdown-body" id="notifications-list"></div>
+              </div>
             </div>
-            <div class="model-card">
-              <h3 class="model-card-title">Функциональная модель</h3>
-              <p class="diagram-ref">Поток обработки от оценок до рекомендации.</p>
-              <ol id="functional-model-list" class="model-list model-list-numbered"></ol>
+            <div class="dropdown-wrap">
+              <button type="button" class="user-chip" id="btn-user-menu" aria-expanded="false">
+                <span class="user-avatar" id="user-avatar">U</span>
+                <span class="user-name" id="user-name">Пользователь</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+              <div class="dropdown-panel dropdown-panel-right hidden" id="user-menu-panel">
+                <button type="button" class="dropdown-item" data-goto="students">Главная</button>
+                <button type="button" class="dropdown-item" data-goto="analysis">Анализ</button>
+                <button type="button" class="dropdown-item" data-goto="settings">Правила</button>
+                <button type="button" class="dropdown-item dropdown-item-danger" id="btn-logout-menu">Выход</button>
+              </div>
             </div>
           </div>
-        </details>
+        </header>
 
-        <div class="row">
-          <div>
-            <label for="analysis-student">Ученик</label>
-            <select id="analysis-student"></select>
-          </div>
+        <div class="page-layout">
+          <main class="page-main">
+            <section id="view-students" class="view-section hidden">
+              <div class="dashboard-top">
+                <div class="dark-card schedule-card">
+                  <div class="schedule-header">
+                    <h2 id="dashboard-schedule-title">Уроки на сегодня</h2>
+                    <div class="schedule-controls">
+                      <button type="button" class="icon-btn icon-btn-ghost" id="btn-schedule-prev" aria-label="Предыдущий день">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M15 18l-6-6 6-6" />
+                        </svg>
+                      </button>
+                      <button type="button" class="icon-btn icon-btn-ghost" id="btn-schedule-next" aria-label="Следующий день">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
+                      </button>
+                      <button type="button" class="icon-btn icon-btn-light" id="btn-schedule-add" aria-label="Добавить урок">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M12 5v14M5 12h14" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="schedule-slots" id="dashboard-lessons">
+                    <p class="schedule-empty">Нет записей уроков</p>
+                  </div>
+                </div>
+
+                <div class="card stats-card">
+                  <div class="stats-rings" id="dashboard-stats">
+                    <div class="ring-widget">
+                      <svg class="ring-chart" viewBox="0 0 120 120">
+                        <circle class="ring-bg" cx="60" cy="60" r="48" />
+                        <circle class="ring-fill" cx="60" cy="60" r="48" id="ring-lessons" />
+                      </svg>
+                      <div class="ring-label">
+                        <strong id="stat-lessons-done">0</strong>
+                        <span>уроков<br />из <span id="stat-lessons-total">0</span></span>
+                      </div>
+                    </div>
+                    <div class="ring-widget">
+                      <svg class="ring-chart" viewBox="0 0 120 120">
+                        <circle class="ring-bg" cx="60" cy="60" r="48" />
+                        <circle class="ring-fill" cx="60" cy="60" r="48" id="ring-students" />
+                      </svg>
+                      <div class="ring-label">
+                        <strong id="stat-students-active">0</strong>
+                        <span>учеников<br />с оценками</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="stats-summary">
+                    <div class="stat-row">
+                      <span class="stat-caption">Всего учеников</span>
+                      <strong id="stat-students-total">0</strong>
+                    </div>
+                    <div class="stat-row">
+                      <span class="stat-caption">Критериев оценки</span>
+                      <strong id="stat-criteria-count">0</strong>
+                    </div>
+                    <div class="stat-row">
+                      <span class="stat-caption">Методик в базе</span>
+                      <strong id="stat-methods-count">0</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card panel" id="students-panel">
+                <div class="panel-header">
+                  <h2>Ученики</h2>
+                  <p class="panel-desc">Ведение данных об учениках и оценках по урокам</p>
+                </div>
+                <div class="form-row">
+                  <div class="form-field">
+                    <label for="new-student-name">Имя ученика</label>
+                    <input type="text" id="new-student-name" placeholder="Например, Иван" />
+                  </div>
+                  <div class="form-field">
+                    <label for="new-student-notes">Заметки</label>
+                    <input type="text" id="new-student-notes" placeholder="Класс, особенности" />
+                  </div>
+                  <button class="btn btn-primary" id="btn-add-student">Добавить</button>
+                </div>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Имя</th>
+                        <th>Уроков</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody id="students-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+            <section id="view-student-detail" class="view-section hidden">
+              <div class="card panel student-detail-panel">
+                <div class="student-hero">
+                  <div class="student-hero-main">
+                    <div class="student-hero-avatar" id="student-hero-avatar" aria-hidden="true">?</div>
+                    <div class="student-hero-text">
+                      <h2 id="student-detail-title">Ученик</h2>
+                      <p class="student-hero-notes" id="student-detail-hint"></p>
+                      <div class="student-hero-meta">
+                        <span class="hero-chip" id="student-lesson-count">0 уроков</span>
+                        <span class="hero-chip hero-chip-muted" id="student-criteria-count">3 критерия</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button class="btn btn-secondary" id="btn-back-students">← К списку</button>
+                </div>
+                <input type="hidden" id="current-student-id" />
+
+                <div id="student-radar-wrap" class="radar-wrap hidden">
+                  <h3 class="section-title">Профиль успеваемости</h3>
+                  <p class="diagram-ref">
+                    Средние баллы по критериям по всем занятиям (шкала 2–5).
+                  </p>
+                  <div class="radar-canvas-box">
+                    <canvas id="student-radar-chart" aria-label="Радар успеваемости по критериям"></canvas>
+                  </div>
+                </div>
+
+                <div class="lesson-form-card">
+                  <div class="lesson-form-header">
+                    <div>
+                      <h3 class="section-title section-title-inline">Новая запись урока</h3>
+                      <p class="form-hint">Нажмите на оценку от 2 до 5 по каждому критерию</p>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm" id="btn-fill-default-scores">Заполнить «3»</button>
+                  </div>
+
+                  <div class="lesson-form-grid">
+                    <div class="form-field form-field-date">
+                      <label for="lesson-date">Дата занятия</label>
+                      <input type="date" id="lesson-date" lang="ru" />
+                      <span class="field-hint" id="lesson-date-display"></span>
+                    </div>
+                  </div>
+
+                  <div id="lesson-scores-inputs" class="scores-grid"></div>
+                  <div id="lesson-form-msg" class="lesson-form-msg hidden" role="status"></div>
+
+                  <div class="lesson-form-actions">
+                    <button class="btn btn-primary" id="btn-add-lesson">Добавить запись</button>
+                  </div>
+                </div>
+
+                <div class="lesson-history">
+                  <h3 class="section-title">История занятий</h3>
+                  <div id="lessons-empty" class="lessons-empty hidden">
+                    <div class="lessons-empty-icon" aria-hidden="true">📋</div>
+                    <p class="lessons-empty-title">Записей пока нет</p>
+                    <p class="lessons-empty-desc">Добавьте первый урок с помощью формы выше — оценки появятся здесь</p>
+                  </div>
+                  <div class="table-wrap lessons-table-wrap" id="lessons-table-wrap">
+                    <table class="lessons-table">
+                      <thead id="lessons-thead"></thead>
+                      <tbody id="lessons-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="view-analysis" class="view-section hidden">
+              <div class="card panel">
+                <div class="panel-header">
+                  <h2>Анализ и рекомендация</h2>
+                  <p class="panel-desc">
+                    Расчёт по даталогической и функциональной модели (F1–F6).
+                  </p>
+                </div>
+
+                <details class="analysis-models" id="analysis-models-block">
+                  <summary>Даталогическая и функциональная модель</summary>
+                  <div class="model-columns">
+                    <div class="model-card">
+                      <h3 class="model-card-title">Даталогическая модель</h3>
+                      <p class="diagram-ref">Сущности и связи (концептуальный уровень).</p>
+                      <ul id="data-logical-list" class="model-list"></ul>
+                    </div>
+                    <div class="model-card">
+                      <h3 class="model-card-title">Функциональная модель</h3>
+                      <p class="diagram-ref">Поток обработки от оценок до рекомендации.</p>
+                      <ol id="functional-model-list" class="model-list model-list-numbered"></ol>
+                    </div>
+                  </div>
+                </details>
+
+                <div class="form-row">
+                  <div class="form-field">
+                    <label for="analysis-student">Ученик</label>
+                    <select id="analysis-student"></select>
+                  </div>
+                  <button class="btn btn-primary" id="btn-run-analysis">Выполнить анализ</button>
+                </div>
+                <div id="analysis-result"></div>
+              </div>
+            </section>
+
+            <section id="view-settings" class="view-section hidden">
+              <div class="card panel">
+                <div class="panel-header">
+                  <h2>Правила</h2>
+                  <p class="panel-desc">
+                    Критерии, методики и таблица подходящести (шкала 2–5).
+                  </p>
+                </div>
+
+                <h3 class="section-title">Критерии</h3>
+                <div id="criteria-list" class="settings-list"></div>
+                <button type="button" class="btn btn-secondary" id="btn-add-criterion">+ Критерий</button>
+
+                <h3 class="section-title">Методики</h3>
+                <div id="methods-list" class="settings-list"></div>
+                <button type="button" class="btn btn-secondary" id="btn-add-method">+ Методика</button>
+
+                <h3 class="section-title">Подходящесть методики под критерий</h3>
+                <p class="diagram-ref">Строка — методика, столбец — критерий.</p>
+                <div class="table-wrap settings-score-wrap">
+                  <table class="settings-score-table" id="method-scores-table">
+                    <thead id="method-scores-thead"></thead>
+                    <tbody id="method-scores-tbody"></tbody>
+                  </table>
+                </div>
+
+                <div class="form-row" style="margin-top: 1.25rem">
+                  <button class="btn btn-secondary" id="btn-export-json">Экспорт JSON</button>
+                  <button class="btn btn-secondary" id="btn-import-json">Импорт из файла</button>
+                  <input type="file" id="import-file" accept="application/json" class="hidden" />
+                </div>
+              </div>
+            </section>
+          </main>
+
+          <aside class="page-aside hidden" id="page-aside">
+            <div class="card aside-card">
+              <div class="aside-header">
+                <h3>Ближайшие задачи</h3>
+                <button type="button" class="icon-btn icon-btn-dark" id="btn-aside-add" aria-label="Добавить ученика">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                </button>
+              </div>
+              <div class="segment-control" id="aside-segment">
+                <button type="button" class="segment active" data-aside-mode="individual">Индивидуально</button>
+                <button type="button" class="segment" data-aside-mode="groups">Группы</button>
+              </div>
+              <div class="aside-empty" id="aside-content">
+                <p>Добавьте оценки ученикам для анализа методики</p>
+              </div>
+            </div>
+          </aside>
         </div>
-        <button class="btn btn-primary" id="btn-run-analysis">Сформировать запрос и выполнить анализ</button>
-        <div id="analysis-result"></div>
-      </section>
+      </div>
+    </div>
 
-      <section id="view-settings" class="panel hidden">
-        <h2>Правила: критерии, методики, оценки</h2>
-        <p class="flow-hint">
-          <strong>Важность критерия</strong> (2–5) — что для вас важнее при выборе методики.
-          <strong>Подходит</strong> в таблице — насколько данная методика хорошо закрывает критерий (2–5). Числа
-          переводятся в веса автоматически.
-        </p>
-
-        <h3 class="settings-subtitle">Критерии</h3>
-        <div id="criteria-list" class="settings-list"></div>
-        <button type="button" class="btn btn-secondary" id="btn-add-criterion">+ Критерий</button>
-
-        <h3 class="settings-subtitle">Методики</h3>
-        <div id="methods-list" class="settings-list"></div>
-        <button type="button" class="btn btn-secondary" id="btn-add-method">+ Методика</button>
-
-        <h3 class="settings-subtitle">Насколько методика подходит под критерий (2–5)</h3>
-        <p class="diagram-ref">Строка — методика, столбец — критерий.</p>
-        <div class="table-wrap settings-score-wrap">
-          <table class="settings-score-table" id="method-scores-table">
-            <thead id="method-scores-thead"></thead>
-            <tbody id="method-scores-tbody"></tbody>
-          </table>
+    <div class="modal-overlay hidden" id="help-modal" role="dialog" aria-modal="true">
+      <div class="modal card">
+        <div class="modal-header">
+          <h2 id="help-modal-title">Справка</h2>
+          <button type="button" class="icon-btn" id="btn-help-close" aria-label="Закрыть">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
         </div>
+        <div class="modal-body" id="help-modal-body"></div>
+      </div>
+    </div>
 
-        <div class="row" style="margin-top: 1rem">
-          <button class="btn btn-secondary" id="btn-export-json">Экспорт настроек (JSON)</button>
-          <button class="btn btn-secondary" id="btn-import-json">Импорт из файла</button>
-          <input type="file" id="import-file" accept="application/json" class="hidden" />
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      Запуск: <code>npm install</code> и <code>npm start</code> — сервер отдаёт интерфейс и API. Данные: папка
-      <code>data/</code>.
-    </footer>
-
-    <!-- Глобальный Chart.js: без ES-модулей графики не зависят от import map / dynamic import -->
     <script src="/vendor/chart.js/dist/chart.umd.js"></script>
     <script type="module" src="js/app.js"></script>
   </body>

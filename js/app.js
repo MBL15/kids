@@ -60,6 +60,50 @@ const state = {
   students: [],
 };
 
+const uiState = {
+  dashboardDate: todayYmd(),
+  asideMode: "individual",
+};
+
+const HELP_CONTENT = {
+  docs: {
+    title: "Документация",
+    html: `
+      <h3>Назначение</h3>
+      <p>Приложение помогает подобрать методику преподавания на основе оценок ученика и правил AHP (анализ иерархий).</p>
+      <h3>Быстрый старт</h3>
+      <ol>
+        <li>Добавьте ученика на главной странице.</li>
+        <li>Откройте карточку и внесите оценки по урокам (шкала 2–5).</li>
+        <li>Настройте критерии и методики в разделе «Правила».</li>
+        <li>Запустите анализ в разделе «Анализ».</li>
+      </ol>
+      <h3>Разделы</h3>
+      <ul>
+        <li><strong>Главная</strong> — расписание уроков и сводная статистика.</li>
+        <li><strong>Ученики</strong> — список учеников и добавление новых.</li>
+        <li><strong>Анализ</strong> — рекомендация методики по данным уроков.</li>
+        <li><strong>Правила</strong> — критерии, методики и таблица подходящести.</li>
+      </ul>
+    `,
+  },
+  faq: {
+    title: "Частые вопросы",
+    html: `
+      <h3>Где хранятся данные?</h3>
+      <p>На сервере в файле <code>data/store.json</code>. Каждый пользователь видит только свои данные.</p>
+      <h3>Какая шкала оценок?</h3>
+      <p>И оценки уроков, и важность критериев используют шкалу от 2 до 5.</p>
+      <h3>Когда появится рекомендация?</h3>
+      <p>После добавления хотя бы одного урока с оценками — в разделе «Анализ» выберите ученика и нажмите «Выполнить анализ».</p>
+      <h3>Можно ли перенести настройки?</h3>
+      <p>Да. В «Правила» используйте экспорт и импорт JSON.</p>
+      <h3>Что означают кольца на главной?</h3>
+      <p>Левое — прогресс по числу уроков, правое — доля учеников, у которых уже есть оценки.</p>
+    `,
+  },
+};
+
 function getToken() {
   return sessionStorage.getItem(TOKEN_KEY);
 }
@@ -181,25 +225,314 @@ async function persist() {
   }
 }
 
-function showAuth() {
-  document.getElementById("main-nav").classList.add("hidden");
-  document.getElementById("view-auth").classList.remove("hidden");
-  ["view-students", "view-student-detail", "view-analysis", "view-settings"].forEach((id) =>
-    document.getElementById(id).classList.add("hidden")
+function setUserDisplay(login) {
+  const name = login?.trim() || "Пользователь";
+  const avatar = document.getElementById("user-avatar");
+  const nameEl = document.getElementById("user-name");
+  if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
+  if (nameEl) nameEl.textContent = name;
+}
+
+function setRingProgress(circleEl, ratio) {
+  if (!circleEl) return;
+  const r = 48;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference * (1 - Math.max(0, Math.min(1, ratio)));
+  circleEl.style.strokeDasharray = String(circumference);
+  circleEl.style.strokeDashoffset = String(offset);
+}
+
+function formatDateRu(ymd) {
+  if (!ymd) return "";
+  const [y, m, d] = ymd.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+function shiftYmd(ymd, days) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const ny = dt.getFullYear();
+  const nm = String(dt.getMonth() + 1).padStart(2, "0");
+  const nd = String(dt.getDate()).padStart(2, "0");
+  return `${ny}-${nm}-${nd}`;
+}
+
+function closeAllDropdowns() {
+  document.querySelectorAll(".dropdown-panel").forEach((el) => el.classList.add("hidden"));
+  document.querySelectorAll("[aria-expanded='true']").forEach((el) => el.setAttribute("aria-expanded", "false"));
+}
+
+function toggleDropdown(buttonId, panelId) {
+  const btn = document.getElementById(buttonId);
+  const panel = document.getElementById(panelId);
+  if (!btn || !panel) return;
+  const willOpen = panel.classList.contains("hidden");
+  closeAllDropdowns();
+  if (willOpen) {
+    panel.classList.remove("hidden");
+    btn.setAttribute("aria-expanded", "true");
+  }
+}
+
+function showHelpModal(kind) {
+  const content = HELP_CONTENT[kind];
+  if (!content) return;
+  document.getElementById("help-modal-title").textContent = content.title;
+  document.getElementById("help-modal-body").innerHTML = content.html;
+  document.getElementById("help-modal").classList.remove("hidden");
+  closeAllDropdowns();
+}
+
+function hideHelpModal() {
+  document.getElementById("help-modal")?.classList.add("hidden");
+}
+
+function focusAddStudent() {
+  showApp("students", { scrollTo: "students-panel" });
+  renderStudents();
+  setTimeout(() => {
+    const input = document.getElementById("new-student-name");
+    input?.focus();
+    input?.select();
+  }, 80);
+}
+
+function goHome() {
+  uiState.dashboardDate = todayYmd();
+  showApp("home");
+  renderStudents();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function collectNotifications() {
+  const items = [];
+  const pending = state.students.filter((s) => !(s.lessons?.length));
+  const ready = state.students.filter((s) => (s.lessons?.length ?? 0) > 0);
+
+  for (const s of pending) {
+    items.push({
+      title: `${s.name}: нет оценок`,
+      meta: "Добавьте первый урок в карточке ученика",
+      action: () => openStudent(s.id),
+    });
+  }
+
+  if (ready.length === 1) {
+    const s = ready[0];
+    items.push({
+      title: `${s.name}: готов к анализу`,
+      meta: `${s.lessons.length} урок(ов) — можно сформировать рекомендацию`,
+      action: () => {
+        showApp("analysis");
+        renderAnalysisForm();
+        const sel = document.getElementById("analysis-student");
+        if (sel) sel.value = s.id;
+      },
+    });
+  } else if (ready.length > 1) {
+    items.push({
+      title: `${ready.length} учеников готовы к анализу`,
+      meta: "Откройте раздел «Анализ» и выберите ученика",
+      action: () => {
+        showApp("analysis");
+        renderAnalysisForm();
+      },
+    });
+  }
+
+  if (!state.criteria.length || !state.methods.length) {
+    items.push({
+      title: "Проверьте правила",
+      meta: "Настройте критерии и методики преподавания",
+      action: () => {
+        showApp("settings");
+        renderSettings();
+      },
+    });
+  }
+  return items;
+}
+
+function renderNotifications() {
+  const items = collectNotifications();
+  const badge = document.getElementById("notif-badge");
+  const list = document.getElementById("notifications-list");
+  const pendingCount = state.students.filter((s) => !(s.lessons?.length)).length;
+  if (badge) {
+    badge.textContent = String(pendingCount || items.length);
+    badge.classList.toggle("hidden", items.length === 0);
+  }
+  if (!list) return;
+  if (!items.length) {
+    list.innerHTML = '<p class="notif-empty">Нет новых уведомлений</p>';
+    return;
+  }
+  list.innerHTML = "";
+  items.slice(0, 8).forEach((item) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "notif-item";
+    btn.innerHTML = `<div class="notif-item-title">${escapeHtml(item.title)}</div><div class="notif-item-meta">${escapeHtml(item.meta)}</div>`;
+    btn.addEventListener("click", () => {
+      closeAllDropdowns();
+      item.action();
+    });
+    list.appendChild(btn);
+  });
+}
+
+function renderAsideContent() {
+  const asideContent = document.getElementById("aside-content");
+  if (!asideContent) return;
+
+  if (uiState.asideMode === "groups") {
+    const grouped = new Map();
+    for (const s of state.students) {
+      const key = (s.notes || "").trim() || "Без группы";
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key).push(s);
+    }
+    if (!state.students.length) {
+      asideContent.innerHTML = "<p>Добавьте учеников — они сгруппируются по полю «Заметки»</p>";
+      return;
+    }
+    asideContent.innerHTML = "";
+    for (const [group, students] of grouped) {
+      const block = document.createElement("div");
+      block.className = "aside-group";
+      block.innerHTML = `<div class="aside-group-title">${escapeHtml(group)}</div>`;
+      students.forEach((s) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "aside-student";
+        row.innerHTML = `
+          <span class="lesson-slot-avatar">${escapeHtml((s.name || "?").charAt(0).toUpperCase())}</span>
+          <div>
+            <div class="aside-student-name">${escapeHtml(s.name)}</div>
+            <div class="aside-student-meta">${s.lessons?.length ?? 0} урок(ов)</div>
+          </div>`;
+        row.addEventListener("click", () => openStudent(s.id));
+        block.appendChild(row);
+      });
+      asideContent.appendChild(block);
+    }
+    return;
+  }
+
+  const pending = state.students.filter((s) => !(s.lessons?.length));
+  if (!pending.length) {
+    asideContent.innerHTML = "<p>Все ученики имеют записи уроков</p>";
+    return;
+  }
+  asideContent.innerHTML = pending
+    .slice(0, 6)
+    .map(
+      (s) => `
+    <div class="aside-student" data-id="${s.id}">
+      <span class="lesson-slot-avatar">${escapeHtml((s.name || "?").charAt(0).toUpperCase())}</span>
+      <div>
+        <div class="aside-student-name">${escapeHtml(s.name)}</div>
+        <div class="aside-student-meta">Нет оценок — добавьте урок</div>
+      </div>
+    </div>`
+    )
+    .join("");
+  asideContent.querySelectorAll(".aside-student").forEach((row) =>
+    row.addEventListener("click", () => openStudent(row.getAttribute("data-id")))
   );
 }
 
-function showApp(view) {
-  document.getElementById("main-nav").classList.remove("hidden");
-  document.getElementById("view-auth").classList.add("hidden");
+function renderDashboard() {
+  const today = todayYmd();
+  const viewDate = uiState.dashboardDate;
+  const titleEl = document.getElementById("dashboard-schedule-title");
+  if (titleEl) titleEl.textContent = `Уроки и дела на ${formatDateRu(viewDate)}`;
+
+  const dayLessons = [];
+  for (const s of state.students) {
+    for (const l of s.lessons || []) {
+      if (lessonDateToInputValue(l) === viewDate) {
+        dayLessons.push({ student: s, lesson: l });
+      }
+    }
+  }
+  dayLessons.sort((a, b) => a.student.name.localeCompare(b.student.name, "ru"));
+
+  const slotsEl = document.getElementById("dashboard-lessons");
+  if (slotsEl) {
+    if (!dayLessons.length) {
+      slotsEl.innerHTML = `<p class="schedule-empty">На ${formatDateRu(viewDate)} уроков нет</p>`;
+    } else {
+      slotsEl.innerHTML = "";
+      dayLessons.forEach(({ student, lesson }, i) => {
+        const ymd = lessonDateToInputValue(lesson);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `lesson-slot${ymd === today && viewDate === today ? " highlight" : ""}`;
+        const initial = (student.name || "?").charAt(0).toUpperCase();
+        const scoreCount = Object.keys(lesson.scores || {}).length;
+        btn.innerHTML = `
+          <span class="lesson-slot-avatar">${escapeHtml(initial)}</span>
+          <span class="lesson-slot-name">${escapeHtml(student.name)}</span>
+          <span class="lesson-slot-meta">Урок · ${scoreCount} оценок</span>`;
+        btn.addEventListener("click", () => openStudent(student.id));
+        slotsEl.appendChild(btn);
+        if (i === 0 && viewDate === today) btn.classList.add("highlight");
+      });
+    }
+  }
+
+  const allLessons = state.students.reduce((n, s) => n + (s.lessons?.length ?? 0), 0);
+  const studentsWithLessons = state.students.filter((s) => (s.lessons?.length ?? 0) > 0).length;
+  const totalStudents = state.students.length;
+  const targetLessons = Math.max(totalStudents * 4, allLessons, 1);
+
+  const el = (id) => document.getElementById(id);
+  if (el("stat-lessons-done")) el("stat-lessons-done").textContent = String(allLessons);
+  if (el("stat-lessons-total")) el("stat-lessons-total").textContent = String(targetLessons);
+  if (el("stat-students-active")) el("stat-students-active").textContent = String(studentsWithLessons);
+  if (el("stat-students-total")) el("stat-students-total").textContent = String(totalStudents);
+  if (el("stat-criteria-count")) el("stat-criteria-count").textContent = String(state.criteria.length);
+  if (el("stat-methods-count")) el("stat-methods-count").textContent = String(state.methods.length);
+
+  setRingProgress(el("ring-lessons"), allLessons / targetLessons);
+  setRingProgress(el("ring-students"), totalStudents ? studentsWithLessons / totalStudents : 0);
+
+  renderAsideContent();
+  renderNotifications();
+}
+
+function showAuth() {
+  document.getElementById("app-shell")?.classList.add("hidden");
+  document.getElementById("view-auth")?.classList.remove("hidden");
+}
+
+function showApp(view, options = {}) {
+  const resolvedView = view === "home" ? "students" : view;
+  document.getElementById("app-shell")?.classList.remove("hidden");
+  document.getElementById("view-auth")?.classList.add("hidden");
   const map = ["students", "student-detail", "analysis", "settings"];
   map.forEach((v) => {
     const el = document.getElementById(`view-${v}`);
-    if (el) el.classList.toggle("hidden", v !== view);
+    if (el) el.classList.toggle("hidden", v !== resolvedView);
   });
-  document.querySelectorAll("#main-nav button[data-view]").forEach((btn) => {
-    btn.classList.toggle("active", btn.getAttribute("data-view") === view);
+  const navView = resolvedView === "student-detail" ? "students" : view === "home" ? "home" : resolvedView;
+  document.querySelectorAll("#main-nav .nav-item[data-view]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-view") === navView);
   });
+  const aside = document.getElementById("page-aside");
+  if (aside) aside.classList.toggle("hidden", resolvedView !== "students");
+  closeAllDropdowns();
+
+  if (options.scrollTo === "students-panel") {
+    setTimeout(() => {
+      document.getElementById("students-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  }
+  if (view === "home" || options.scrollTop) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 function setAuthMsg(html, type) {
@@ -226,9 +559,12 @@ document.getElementById("btn-register").addEventListener("click", async () => {
     return;
   }
   sessionStorage.setItem(TOKEN_KEY, data.token);
+  sessionStorage.setItem("ahp_login", login);
   await bootstrapSession();
+  setUserDisplay(login);
   setAuthMsg("Аккаунт создан.", "success");
-  showApp("students");
+  uiState.dashboardDate = todayYmd();
+  showApp("home");
   renderStudents();
 });
 
@@ -246,27 +582,123 @@ document.getElementById("btn-login").addEventListener("click", async () => {
     return;
   }
   sessionStorage.setItem(TOKEN_KEY, data.token);
+  sessionStorage.setItem("ahp_login", login);
   await bootstrapSession();
-  showApp("students");
+  setUserDisplay(login);
+  uiState.dashboardDate = todayYmd();
+  showApp("home");
   renderStudents();
 });
 
 document.getElementById("btn-logout").addEventListener("click", () => {
   sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem("ahp_login");
+  closeAllDropdowns();
   showAuth();
 });
 
-document.querySelectorAll("#main-nav button[data-view]").forEach((btn) => {
+document.getElementById("btn-logout-menu")?.addEventListener("click", () => {
+  document.getElementById("btn-logout")?.click();
+});
+
+document.querySelectorAll("#main-nav .nav-item[data-view]").forEach((btn) => {
   btn.addEventListener("click", () => {
     const v = btn.getAttribute("data-view");
-    showApp(v);
+    if (v === "home") {
+      goHome();
+      return;
+    }
+    showApp(v, v === "students" ? { scrollTo: "students-panel" } : {});
     if (v === "students") renderStudents();
     if (v === "analysis") renderAnalysisForm();
     if (v === "settings") renderSettings();
   });
 });
 
+document.getElementById("btn-sidebar-home")?.addEventListener("click", goHome);
+
+document.getElementById("btn-onboarding")?.addEventListener("click", () => {
+  showHelpModal("docs");
+});
+
+document.getElementById("btn-help-docs")?.addEventListener("click", () => showHelpModal("docs"));
+document.getElementById("btn-help-faq")?.addEventListener("click", () => showHelpModal("faq"));
+document.getElementById("btn-help-close")?.addEventListener("click", hideHelpModal);
+document.getElementById("help-modal")?.addEventListener("click", (e) => {
+  if (e.target.id === "help-modal") hideHelpModal();
+});
+
+document.getElementById("btn-notifications")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  renderNotifications();
+  toggleDropdown("btn-notifications", "notifications-panel");
+});
+
+document.getElementById("btn-user-menu")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggleDropdown("btn-user-menu", "user-menu-panel");
+});
+
+document.querySelectorAll("#user-menu-panel .dropdown-item[data-goto]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const v = btn.getAttribute("data-goto");
+    showApp(v);
+    if (v === "students") renderStudents();
+    if (v === "analysis") renderAnalysisForm();
+    if (v === "settings") renderSettings();
+    closeAllDropdowns();
+  });
+});
+
+document.getElementById("btn-schedule-prev")?.addEventListener("click", () => {
+  uiState.dashboardDate = shiftYmd(uiState.dashboardDate, -1);
+  renderDashboard();
+});
+
+document.getElementById("btn-schedule-next")?.addEventListener("click", () => {
+  uiState.dashboardDate = shiftYmd(uiState.dashboardDate, 1);
+  renderDashboard();
+});
+
+document.getElementById("btn-schedule-add")?.addEventListener("click", () => {
+  const pending = state.students.find((s) => !(s.lessons?.length));
+  if (pending) {
+    openStudent(pending.id);
+    return;
+  }
+  if (state.students.length) {
+    openStudent(state.students[0].id);
+    return;
+  }
+  focusAddStudent();
+});
+
+document.getElementById("btn-aside-add")?.addEventListener("click", focusAddStudent);
+
+document.querySelectorAll("#aside-segment .segment").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    uiState.asideMode = btn.getAttribute("data-aside-mode") || "individual";
+    document.querySelectorAll("#aside-segment .segment").forEach((b) => {
+      b.classList.toggle("active", b === btn);
+    });
+    renderAsideContent();
+  });
+});
+
+document.addEventListener("click", () => closeAllDropdowns());
+document.querySelectorAll(".dropdown-wrap").forEach((wrap) => {
+  wrap.addEventListener("click", (e) => e.stopPropagation());
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    hideHelpModal();
+    closeAllDropdowns();
+  }
+});
+
 function renderStudents() {
+  renderDashboard();
   const tbody = document.getElementById("students-tbody");
   tbody.innerHTML = "";
   for (const s of state.students) {
@@ -312,14 +744,107 @@ document.getElementById("btn-add-student").addEventListener("click", async () =>
   renderStudents();
 });
 
+function setLessonFormMsg(text, type) {
+  const el = document.getElementById("lesson-form-msg");
+  if (!el) return;
+  if (!text) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = text;
+  el.className = `lesson-form-msg ${type || ""}`;
+  el.classList.remove("hidden");
+}
+
+function updateLessonDateDisplay() {
+  const input = document.getElementById("lesson-date");
+  const display = document.getElementById("lesson-date-display");
+  if (!input || !display) return;
+  display.textContent = input.value ? formatDateRu(input.value) : "Выберите дату";
+}
+
+function scoreBadgeHtml(value) {
+  if (value == null || value === "" || value === "—") return "—";
+  const v = Number(value);
+  if (!Number.isFinite(v)) return "—";
+  const cls = v <= 2 ? "low" : v === 3 ? "mid" : v === 4 ? "good" : "high";
+  return `<span class="score-badge score-${cls}">${v}</span>`;
+}
+
+function getSelectedLessonScores() {
+  const scores = {};
+  let any = false;
+  document.querySelectorAll("#lesson-scores-inputs .score-pills").forEach((group) => {
+    const active = group.querySelector(".score-pill.active");
+    const cid = group.getAttribute("data-crit");
+    if (active && cid) {
+      scores[cid] = parseInt(active.getAttribute("data-value"), 10);
+      any = true;
+    }
+  });
+  return { scores, any };
+}
+
+function clearLessonScoreInputs() {
+  document.querySelectorAll("#lesson-scores-inputs .score-pill.active").forEach((btn) => {
+    btn.classList.remove("active");
+    btn.setAttribute("aria-pressed", "false");
+  });
+}
+
+function setAllLessonScores(value) {
+  document.querySelectorAll("#lesson-scores-inputs .score-pills").forEach((group) => {
+    const pill = group.querySelector(`.score-pill[data-value="${value}"]`);
+    if (!pill) return;
+    group.querySelectorAll(".score-pill").forEach((b) => {
+      b.classList.remove("active");
+      b.setAttribute("aria-pressed", "false");
+    });
+    pill.classList.add("active");
+    pill.setAttribute("aria-pressed", "true");
+  });
+  setLessonFormMsg("", "");
+}
+
+function bindScorePillGroup(group) {
+  group.querySelectorAll(".score-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      group.querySelectorAll(".score-pill").forEach((b) => {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      });
+      btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
+      setLessonFormMsg("", "");
+    });
+  });
+}
+
 function openStudent(id) {
   const s = state.students.find((x) => x.id === id);
   if (!s) return;
   document.getElementById("current-student-id").value = id;
   document.getElementById("student-detail-title").textContent = s.name;
-  document.getElementById("student-detail-hint").textContent = s.notes || "Заметок нет.";
+  document.getElementById("student-detail-hint").textContent = s.notes?.trim() || "Заметки не указаны";
+  const avatar = document.getElementById("student-hero-avatar");
+  if (avatar) avatar.textContent = (s.name || "?").charAt(0).toUpperCase();
+  const lessonCount = s.lessons?.length ?? 0;
+  const countEl = document.getElementById("student-lesson-count");
+  if (countEl) {
+    const word = lessonCount === 1 ? "урок" : lessonCount >= 2 && lessonCount <= 4 ? "урока" : "уроков";
+    countEl.textContent = `${lessonCount} ${word}`;
+  }
+  const critEl = document.getElementById("student-criteria-count");
+  if (critEl) {
+    const n = state.criteria.length;
+    const word = n === 1 ? "критерий" : n >= 2 && n <= 4 ? "критерия" : "критериев";
+    critEl.textContent = `${n} ${word}`;
+  }
   const dateEl = document.getElementById("lesson-date");
   if (dateEl) dateEl.value = todayYmd();
+  updateLessonDateDisplay();
+  setLessonFormMsg("", "");
   showApp("student-detail");
   renderStudentLessons(s);
 }
@@ -334,9 +859,23 @@ function renderLessonInputs() {
   const wrap = document.getElementById("lesson-scores-inputs");
   wrap.innerHTML = "";
   migrateAndNormalize(state);
+  const labels = ["слабо", "средне", "хорошо", "отлично"];
   for (const c of state.criteria) {
     const div = document.createElement("div");
-    div.innerHTML = `<label>${escapeHtml(c.name)}</label><input type="number" min="${SCORE_MIN}" max="${SCORE_MAX}" step="1" data-crit="${c.id}" placeholder="${SCORE_MIN}–${SCORE_MAX}" />`;
+    div.className = "score-field";
+    const pills = [];
+    for (let v = SCORE_MIN; v <= SCORE_MAX; v++) {
+      pills.push(
+        `<button type="button" class="score-pill" data-value="${v}" aria-pressed="false" aria-label="${escapeHtml(c.name)}: ${v}">${v}</button>`
+      );
+    }
+    div.innerHTML = `
+      <label class="score-field-label" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</label>
+      <div class="score-pills" role="group" aria-label="${escapeHtml(c.name)}" data-crit="${c.id}">
+        ${pills.join("")}
+      </div>
+      <div class="score-pill-labels"><span>${labels[0]}</span><span>${labels[labels.length - 1]}</span></div>`;
+    bindScorePillGroup(div.querySelector(".score-pills"));
     wrap.appendChild(div);
   }
 }
@@ -345,41 +884,48 @@ function renderStudentLessons(s) {
   renderLessonInputs();
   const dateInp = document.getElementById("lesson-date");
   if (dateInp && !dateInp.value) dateInp.value = todayYmd();
+  updateLessonDateDisplay();
 
   const thead = document.getElementById("lessons-thead");
   const tbody = document.getElementById("lessons-tbody");
+  const emptyEl = document.getElementById("lessons-empty");
+  const tableWrap = document.getElementById("lessons-table-wrap");
   const crit = state.criteria;
-  thead.innerHTML = `<tr><th>№</th><th>Дата занятия</th>${crit.map((c) => `<th>${escapeHtml(c.name)}</th>`).join("")}<th></th></tr>`;
+  thead.innerHTML = `<tr><th>№</th><th>Дата</th>${crit
+    .map((c) => `<th title="${escapeHtml(c.name)}">${escapeHtml(c.name.length > 22 ? `${c.name.slice(0, 20)}…` : c.name)}</th>`)
+    .join("")}<th></th></tr>`;
   tbody.innerHTML = "";
   const sorted = [...(s.lessons || [])].sort((a, b) => {
     const da = lessonDateToInputValue(a) || "0000-00-00";
     const db = lessonDateToInputValue(b) || "0000-00-00";
     return db.localeCompare(da);
   });
+
+  const hasLessons = sorted.length > 0;
+  emptyEl?.classList.toggle("hidden", hasLessons);
+  tableWrap?.classList.toggle("hidden", !hasLessons);
+
   sorted.forEach((lesson, idx) => {
     const tr = document.createElement("tr");
     const ymd = lessonDateToInputValue(lesson);
-    const cells = crit.map((c) => `<td>${lesson.scores?.[c.id] ?? "—"}</td>`).join("");
-    const dateCell = `<td><input type="date" class="lesson-row-date" data-li="${lesson.id}" value="${ymd}" aria-label="Дата занятия" /></td>`;
-    tr.innerHTML = `<td>${idx + 1}</td>${dateCell}${cells}<td><button class="btn btn-danger btn-del-lesson" data-li="${lesson.id}">Удалить</button></td>`;
+    const cells = crit.map((c) => `<td>${scoreBadgeHtml(lesson.scores?.[c.id])}</td>`).join("");
+    const dateCell = `<td><span class="date-display">${formatDateRu(ymd)}</span></td>`;
+    tr.innerHTML = `<td>${idx + 1}</td>${dateCell}${cells}<td><button type="button" class="btn btn-danger btn-del-lesson" data-li="${lesson.id}">Удалить</button></td>`;
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll(".btn-del-lesson").forEach((b) =>
     b.addEventListener("click", async () => {
+      if (!confirm("Удалить запись урока?")) return;
       const lid = b.getAttribute("data-li");
       s.lessons = s.lessons.filter((l) => l.id !== lid);
       await persist();
       renderStudentLessons(s);
-    })
-  );
-  tbody.querySelectorAll(".lesson-row-date").forEach((inp) =>
-    inp.addEventListener("change", async () => {
-      const lid = inp.getAttribute("data-li");
-      const lesson = s.lessons.find((l) => l.id === lid);
-      if (!lesson) return;
-      const v = inp.value;
-      lesson.date = v || todayYmd();
-      await persist();
+      const countEl = document.getElementById("student-lesson-count");
+      if (countEl) {
+        const n = s.lessons?.length ?? 0;
+        const word = n === 1 ? "урок" : n >= 2 && n <= 4 ? "урока" : "уроков";
+        countEl.textContent = `${n} ${word}`;
+      }
     })
   );
 
@@ -389,37 +935,40 @@ function renderStudentLessons(s) {
   );
 }
 
+document.getElementById("lesson-date")?.addEventListener("change", updateLessonDateDisplay);
+
+document.getElementById("btn-fill-default-scores")?.addEventListener("click", () => {
+  setAllLessonScores(SCORE_DEFAULT);
+});
+
 document.getElementById("btn-add-lesson").addEventListener("click", async () => {
   const sid = document.getElementById("current-student-id").value;
   const s = state.students.find((x) => x.id === sid);
   if (!s) return;
-  const scores = {};
-  let any = false;
-  document.querySelectorAll("#lesson-scores-inputs input[data-crit]").forEach((inp) => {
-    const v = parseFloat(inp.value);
-    const cid = inp.getAttribute("data-crit");
-    if (!Number.isNaN(v)) {
-      scores[cid] = Math.max(SCORE_MIN, Math.min(SCORE_MAX, Math.round(v)));
-      any = true;
-    }
-  });
+  const { scores, any } = getSelectedLessonScores();
   if (!any) {
-    alert(`Введите хотя бы одну оценку (${SCORE_MIN}–${SCORE_MAX}).`);
+    setLessonFormMsg(`Выберите оценку хотя бы по одному критерию (${SCORE_MIN}–${SCORE_MAX}).`, "error");
     return;
   }
   const dateEl = document.getElementById("lesson-date");
   const dateYmd = (dateEl?.value || todayYmd()).trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) {
-    alert("Укажите корректную дату занятия.");
+    setLessonFormMsg("Укажите корректную дату занятия.", "error");
     return;
   }
   if (!s.lessons) s.lessons = [];
   s.lessons.push({ id: uid(), date: dateYmd, scores });
   await persist();
-  document.querySelectorAll("#lesson-scores-inputs input[data-crit]").forEach((inp) => {
-    inp.value = "";
-  });
+  clearLessonScoreInputs();
+  setLessonFormMsg(`Запись за ${formatDateRu(dateYmd)} добавлена.`, "success");
   renderStudentLessons(s);
+  const countEl = document.getElementById("student-lesson-count");
+  if (countEl) {
+    const n = s.lessons.length;
+    const word = n === 1 ? "урок" : n >= 2 && n <= 4 ? "урока" : "уроков";
+    countEl.textContent = `${n} ${word}`;
+  }
+  renderDashboard();
 });
 
 function fillAnalysisModelListsOnce() {
@@ -713,7 +1262,9 @@ document.getElementById("import-file").addEventListener("change", (e) => {
 
 (async function init() {
   if (await bootstrapSession()) {
-    showApp("students");
+    setUserDisplay(sessionStorage.getItem("ahp_login") || "");
+    uiState.dashboardDate = todayYmd();
+    showApp("home");
     renderStudents();
   } else {
     showAuth();

@@ -77,18 +77,18 @@ export async function updateStudentRadarChart(canvas, { criteria, lessons }) {
     return;
   }
 
-  Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
-  Chart.defaults.color = "#5c4f42";
+  Chart.defaults.font.family = "'Inter', 'Segoe UI', system-ui, sans-serif";
+  Chart.defaults.color = "#6b6b70";
 
   const labels = criteria.map((c) => shortenLabel(c.name, 22));
   const data = avgs.map((a) => (a == null ? SCORE_MIN : Number(a.toFixed(2))));
 
   const maxV = Math.max(...data);
   const pointBg = data.map((v) =>
-    Math.abs(v - maxV) < 1e-6 ? "rgba(143, 107, 61, 1)" : "rgba(122, 107, 90, 0.88)"
+    Math.abs(v - maxV) < 1e-6 ? "rgba(123, 77, 255, 1)" : "rgba(167, 139, 250, 0.88)"
   );
   const pointBorder = data.map((v) =>
-    Math.abs(v - maxV) < 1e-6 ? "rgba(143, 107, 61, 1)" : "rgba(122, 107, 90, 0.45)"
+    Math.abs(v - maxV) < 1e-6 ? "rgba(123, 77, 255, 1)" : "rgba(167, 139, 250, 0.45)"
   );
 
   const ctx = canvas.getContext("2d");
@@ -101,12 +101,12 @@ export async function updateStudentRadarChart(canvas, { criteria, lessons }) {
           label: "Средний балл по критерию",
           data,
           fill: true,
-          backgroundColor: "rgba(143, 107, 61, 0.22)",
-          borderColor: "rgba(143, 107, 61, 0.95)",
+          backgroundColor: "rgba(123, 77, 255, 0.22)",
+          borderColor: "rgba(123, 77, 255, 0.95)",
           borderWidth: 2,
           pointBackgroundColor: pointBg,
           pointBorderColor: pointBorder,
-          pointHoverBackgroundColor: "rgba(143, 107, 61, 1)",
+          pointHoverBackgroundColor: "rgba(123, 77, 255, 1)",
           pointRadius: 6,
           pointHoverRadius: 7,
         },
@@ -132,16 +132,16 @@ export async function updateStudentRadarChart(canvas, { criteria, lessons }) {
           min: SCORE_MIN,
           max: SCORE_MAX,
           beginAtZero: false,
-          angleLines: { color: "rgba(80, 70, 58, 0.45)" },
-          grid: { color: "rgba(80, 70, 58, 0.38)" },
+          angleLines: { color: "rgba(107, 107, 112, 0.45)" },
+          grid: { color: "rgba(107, 107, 112, 0.38)" },
           pointLabels: {
-            color: "#3a3228",
+            color: "#1a1a1a",
             font: { size: 11 },
           },
           ticks: {
             stepSize: 1,
             backdropColor: "transparent",
-            color: "#5c4f42",
+            color: "#6b6b70",
             showLabelBackdrop: false,
           },
         },
@@ -171,8 +171,8 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
     return;
   }
 
-  Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
-  Chart.defaults.color = "#5c4f42";
+  Chart.defaults.font.family = "'Inter', 'Segoe UI', system-ui, sans-serif";
+  Chart.defaults.color = "#6b6b70";
 
   const methSlice = methods.slice(0, n);
   const gpSlice = globalPriorities.slice(0, n);
@@ -190,8 +190,8 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
           {
             label: "Доля приоритета, %",
             data: [pct[0]],
-            backgroundColor: "rgba(143, 107, 61, 0.42)",
-            borderColor: "rgba(143, 107, 61, 0.95)",
+            backgroundColor: "rgba(123, 77, 255, 0.42)",
+            borderColor: "rgba(123, 77, 255, 0.95)",
             borderWidth: 1,
           },
         ],
@@ -214,12 +214,12 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
           x: {
             min: 0,
             max: 100,
-            grid: { color: "rgba(80, 70, 58, 0.35)" },
-            ticks: { color: "#5c4f42" },
+            grid: { color: "rgba(107, 107, 112, 0.35)" },
+            ticks: { color: "#6b6b70" },
           },
           y: {
             grid: { display: false },
-            ticks: { color: "#3a3228", font: { size: 11 } },
+            ticks: { color: "#1a1a1a", font: { size: 11 } },
           },
         },
       },
@@ -232,10 +232,10 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
 
   const maxV = Math.max(...pct);
   const pointBg = pct.map((v) =>
-    Math.abs(v - maxV) < 1e-6 ? "rgba(143, 107, 61, 1)" : "rgba(122, 107, 90, 0.88)"
+    Math.abs(v - maxV) < 1e-6 ? "rgba(123, 77, 255, 1)" : "rgba(167, 139, 250, 0.88)"
   );
   const pointBorder = pct.map((v) =>
-    Math.abs(v - maxV) < 1e-6 ? "rgba(143, 107, 61, 1)" : "rgba(122, 107, 90, 0.45)"
+    Math.abs(v - maxV) < 1e-6 ? "rgba(123, 77, 255, 1)" : "rgba(167, 139, 250, 0.45)"
   );
 
   analysisMethodRadarInstance = new Chart(ctx, {
@@ -247,12 +247,12 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
           label: "Доля приоритета, %",
           data: pct,
           fill: true,
-          backgroundColor: "rgba(143, 107, 61, 0.22)",
-          borderColor: "rgba(143, 107, 61, 0.95)",
+          backgroundColor: "rgba(123, 77, 255, 0.22)",
+          borderColor: "rgba(123, 77, 255, 0.95)",
           borderWidth: 2,
           pointBackgroundColor: pointBg,
           pointBorderColor: pointBorder,
-          pointHoverBackgroundColor: "rgba(143, 107, 61, 1)",
+          pointHoverBackgroundColor: "rgba(123, 77, 255, 1)",
           pointRadius: 6,
           pointHoverRadius: 7,
         },
@@ -276,16 +276,16 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
         r: {
           min: 0,
           max: rMax,
-          angleLines: { color: "rgba(80, 70, 58, 0.45)" },
-          grid: { color: "rgba(80, 70, 58, 0.38)" },
+          angleLines: { color: "rgba(107, 107, 112, 0.45)" },
+          grid: { color: "rgba(107, 107, 112, 0.38)" },
           pointLabels: {
-            color: "#3a3228",
+            color: "#1a1a1a",
             font: { size: 11 },
           },
           ticks: {
             stepSize: Math.max(5, Math.ceil(rMax / 8 / 5) * 5),
             backdropColor: "transparent",
-            color: "#5c4f42",
+            color: "#6b6b70",
             showLabelBackdrop: false,
           },
         },
