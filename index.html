@@ -87,6 +87,13 @@
             </svg>
             Ученики
           </button>
+          <button type="button" class="nav-item" data-view="schedule">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="3" y="4" width="18" height="18" rx="2" />
+              <path d="M16 2v4M8 2v4M3 10h18" />
+            </svg>
+            Расписание
+          </button>
           <button type="button" class="nav-item" data-view="analysis">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6" />
@@ -141,6 +148,7 @@
               </button>
               <div class="dropdown-panel dropdown-panel-right hidden" id="user-menu-panel">
                 <button type="button" class="dropdown-item" data-goto="students">Главная</button>
+                <button type="button" class="dropdown-item" data-goto="schedule">Расписание</button>
                 <button type="button" class="dropdown-item" data-goto="analysis">Анализ</button>
                 <button type="button" class="dropdown-item" data-goto="settings">Правила</button>
                 <button type="button" class="dropdown-item dropdown-item-danger" id="btn-logout-menu">Выход</button>
@@ -294,6 +302,14 @@
                       <input type="date" id="lesson-date" lang="ru" />
                       <span class="field-hint" id="lesson-date-display"></span>
                     </div>
+                    <div class="form-field form-field-time">
+                      <label for="lesson-time-start">Время начала</label>
+                      <input type="time" id="lesson-time-start" step="300" />
+                    </div>
+                    <div class="form-field form-field-time">
+                      <label for="lesson-time-end">Время окончания</label>
+                      <input type="time" id="lesson-time-end" step="300" />
+                    </div>
                   </div>
 
                   <div id="lesson-scores-inputs" class="scores-grid"></div>
@@ -317,6 +333,42 @@
                       <tbody id="lessons-tbody"></tbody>
                     </table>
                   </div>
+                </div>
+              </div>
+            </section>
+
+            <section id="view-schedule" class="view-section hidden">
+              <div class="card panel schedule-page">
+                <div class="schedule-page-header">
+                  <div>
+                    <h2>Расписание</h2>
+                    <p class="panel-desc">Уроки по дням недели — нажмите на день или урок для подробностей</p>
+                  </div>
+                  <div class="schedule-toolbar">
+                    <button type="button" class="icon-btn" id="btn-schedule-week-prev" aria-label="Предыдущая неделя">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M15 18l-6-6 6-6" />
+                      </svg>
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-schedule-today">Сегодня</button>
+                    <span class="schedule-week-label" id="schedule-week-label"></span>
+                    <button type="button" class="icon-btn" id="btn-schedule-week-next" aria-label="Следующая неделя">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-schedule-page-add">+ Урок</button>
+                  </div>
+                </div>
+
+                <div class="schedule-week-grid" id="schedule-week-grid"></div>
+
+                <div class="schedule-day-panel" id="schedule-day-panel">
+                  <div class="schedule-day-panel-header">
+                    <h3 id="schedule-day-title">Выберите день</h3>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-schedule-day-add">Добавить урок</button>
+                  </div>
+                  <div id="schedule-day-lessons" class="schedule-day-lessons"></div>
                 </div>
               </div>
             </section>
@@ -411,6 +463,47 @@
               </div>
             </div>
           </aside>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-overlay hidden" id="schedule-add-modal" role="dialog" aria-modal="true">
+      <div class="modal card">
+        <div class="modal-header">
+          <h2>Новый урок в расписании</h2>
+          <button type="button" class="icon-btn" id="btn-schedule-add-close" aria-label="Закрыть">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-stack">
+            <div>
+              <label for="schedule-add-student">Ученик</label>
+              <select id="schedule-add-student"></select>
+            </div>
+            <div>
+              <label for="schedule-add-date">Дата</label>
+              <input type="date" id="schedule-add-date" />
+            </div>
+            <div class="form-row" style="margin-bottom: 0">
+              <div class="form-field">
+                <label for="schedule-add-time-start">Начало</label>
+                <input type="time" id="schedule-add-time-start" step="300" />
+              </div>
+              <div class="form-field">
+                <label for="schedule-add-time-end">Конец</label>
+                <input type="time" id="schedule-add-time-end" step="300" />
+              </div>
+            </div>
+          </div>
+          <p class="form-hint" style="margin-top: 0.75rem">Оценки можно добавить позже в карточке ученика</p>
+          <div id="schedule-add-msg" class="lesson-form-msg hidden" role="status"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" id="btn-schedule-add-cancel">Отмена</button>
+            <button type="button" class="btn btn-primary" id="btn-schedule-add-submit">Добавить</button>
+          </div>
         </div>
       </div>
     </div>

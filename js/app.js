@@ -63,7 +63,15 @@ const state = {
 const uiState = {
   dashboardDate: todayYmd(),
   asideMode: "individual",
+  scheduleWeekStart: null,
+  scheduleSelectedDate: null,
 };
+
+const WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+const MONTHS_RU_GEN = [
+  "января", "февраля", "марта", "апреля", "мая", "июня",
+  "июля", "августа", "сентября", "октября", "ноября", "декабря",
+];
 
 const HELP_CONTENT = {
   docs: {
@@ -256,6 +264,219 @@ function shiftYmd(ymd, days) {
   const nm = String(dt.getMonth() + 1).padStart(2, "0");
   const nd = String(dt.getDate()).padStart(2, "0");
   return `${ny}-${nm}-${nd}`;
+}
+
+function getWeekStartYmd(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dow = dt.getDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  return shiftYmd(ymd, offset);
+}
+
+function getWeekDays(weekStartYmd) {
+  return Array.from({ length: 7 }, (_, i) => shiftYmd(weekStartYmd, i));
+}
+
+function getWeekdayIndex(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 0 ? 6 : dow - 1;
+}
+
+function formatWeekRangeLabel(weekStartYmd) {
+  const days = getWeekDays(weekStartYmd);
+  const start = days[0].split("-").map(Number);
+  const end = days[6].split("-").map(Number);
+  if (start[1] === end[1]) {
+    return `${start[2]}–${end[2]} ${MONTHS_RU_GEN[start[1] - 1]} ${start[0]}`;
+  }
+  return `${start[2]} ${MONTHS_RU_GEN[start[1] - 1]} – ${end[2]} ${MONTHS_RU_GEN[end[1] - 1]} ${end[0]}`;
+}
+
+function formatDayTitle(ymd) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dow = dt.getDay();
+  const dayIdx = dow === 0 ? 6 : dow - 1;
+  return `${WEEKDAY_SHORT[dayIdx]}, ${d} ${MONTHS_RU_GEN[m - 1]}`;
+}
+
+function formatLessonTime(lesson) {
+  const start = lesson?.timeStart?.trim();
+  const end = lesson?.timeEnd?.trim();
+  if (start && end) return `${start} – ${end}`;
+  if (start) return start;
+  return "Урок";
+}
+
+function lessonHasScores(lesson) {
+  const scores = lesson?.scores || {};
+  return Object.keys(scores).length > 0;
+}
+
+function collectLessonEntries() {
+  const entries = [];
+  for (const s of state.students) {
+    for (const l of s.lessons || []) {
+      entries.push({
+        student: s,
+        lesson: l,
+        ymd: lessonDateToInputValue(l),
+      });
+    }
+  }
+  return entries;
+}
+
+function ensureScheduleState() {
+  const today = todayYmd();
+  if (!uiState.scheduleWeekStart) uiState.scheduleWeekStart = getWeekStartYmd(today);
+  if (!uiState.scheduleSelectedDate) uiState.scheduleSelectedDate = today;
+}
+
+function setScheduleAddMsg(text, type) {
+  const el = document.getElementById("schedule-add-msg");
+  if (!el) return;
+  if (!text) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = text;
+  el.className = `lesson-form-msg ${type || ""}`;
+  el.classList.remove("hidden");
+}
+
+function openScheduleAddModal(dateYmd) {
+  ensureScheduleState();
+  const sel = document.getElementById("schedule-add-student");
+  const dateEl = document.getElementById("schedule-add-date");
+  if (sel) {
+    sel.innerHTML = "";
+    if (!state.students.length) {
+      const o = document.createElement("option");
+      o.value = "";
+      o.textContent = "— сначала добавьте ученика —";
+      sel.appendChild(o);
+    } else {
+      for (const s of state.students) {
+        const o = document.createElement("option");
+        o.value = s.id;
+        o.textContent = s.name;
+        sel.appendChild(o);
+      }
+    }
+  }
+  if (dateEl) dateEl.value = dateYmd || uiState.scheduleSelectedDate || todayYmd();
+  document.getElementById("schedule-add-time-start").value = "12:00";
+  document.getElementById("schedule-add-time-end").value = "12:55";
+  setScheduleAddMsg("", "");
+  document.getElementById("schedule-add-modal")?.classList.remove("hidden");
+}
+
+function hideScheduleAddModal() {
+  document.getElementById("schedule-add-modal")?.classList.add("hidden");
+  setScheduleAddMsg("", "");
+}
+
+function renderScheduleDayPanel(selectedYmd) {
+  const titleEl = document.getElementById("schedule-day-title");
+  const listEl = document.getElementById("schedule-day-lessons");
+  if (!titleEl || !listEl) return;
+
+  titleEl.textContent = `Уроки и дела на ${formatDateRu(selectedYmd)}`;
+  const dayEntries = collectLessonEntries()
+    .filter((e) => e.ymd === selectedYmd)
+    .sort((a, b) => (a.lesson.timeStart || "").localeCompare(b.lesson.timeStart || ""));
+
+  if (!dayEntries.length) {
+    listEl.innerHTML = '<p class="schedule-panel-empty">На этот день уроков нет — нажмите «Добавить урок»</p>';
+    return;
+  }
+
+  listEl.innerHTML = "";
+  dayEntries.forEach(({ student, lesson }) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "lesson-slot";
+    const initial = (student.name || "?").charAt(0).toUpperCase();
+    const meta = lessonHasScores(lesson)
+      ? formatLessonTime(lesson)
+      : `${formatLessonTime(lesson)} · без оценок`;
+    btn.innerHTML = `
+      <span class="lesson-slot-avatar">${escapeHtml(initial)}</span>
+      <span class="lesson-slot-name">${escapeHtml(student.name)}</span>
+      <span class="lesson-slot-meta">${escapeHtml(meta)}</span>`;
+    btn.addEventListener("click", () => openStudent(student.id, { date: selectedYmd, lessonId: lesson.id }));
+    listEl.appendChild(btn);
+  });
+}
+
+function renderSchedule() {
+  ensureScheduleState();
+  const weekStart = uiState.scheduleWeekStart;
+  const selected = uiState.scheduleSelectedDate;
+  const today = todayYmd();
+  const weekDays = getWeekDays(weekStart);
+  const entries = collectLessonEntries();
+
+  const labelEl = document.getElementById("schedule-week-label");
+  if (labelEl) labelEl.textContent = formatWeekRangeLabel(weekStart);
+
+  const grid = document.getElementById("schedule-week-grid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  weekDays.forEach((ymd) => {
+    const col = document.createElement("div");
+    col.className = "schedule-day-col";
+    if (ymd === today) col.classList.add("is-today");
+    if (ymd === selected) col.classList.add("is-selected");
+
+    const dayIdx = getWeekdayIndex(ymd);
+    const dayNum = parseInt(ymd.split("-")[2], 10);
+
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "schedule-day-col-head";
+    head.innerHTML = `<span class="schedule-day-name">${WEEKDAY_SHORT[dayIdx]}</span><span class="schedule-day-num">${dayNum}</span>`;
+    head.addEventListener("click", () => {
+      uiState.scheduleSelectedDate = ymd;
+      renderSchedule();
+    });
+
+    const body = document.createElement("div");
+    body.className = "schedule-day-col-body";
+    const dayEntries = entries
+      .filter((e) => e.ymd === ymd)
+      .sort((a, b) => (a.lesson.timeStart || "").localeCompare(b.lesson.timeStart || ""));
+
+    if (!dayEntries.length) {
+      body.innerHTML = '<div class="schedule-day-empty">—</div>';
+    } else {
+      dayEntries.forEach(({ student, lesson }) => {
+        const ev = document.createElement("button");
+        ev.type = "button";
+        ev.className = `schedule-event${lessonHasScores(lesson) ? "" : " is-draft"}`;
+        ev.innerHTML = `
+          <span class="schedule-event-time">${escapeHtml(formatLessonTime(lesson))}</span>
+          <span class="schedule-event-name">${escapeHtml(student.name)}</span>
+          <span class="schedule-event-meta">${lessonHasScores(lesson) ? "Оценки внесены" : "Нужны оценки"}</span>`;
+        ev.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openStudent(student.id, { date: ymd, lessonId: lesson.id });
+        });
+        body.appendChild(ev);
+      });
+    }
+
+    col.appendChild(head);
+    col.appendChild(body);
+    grid.appendChild(col);
+  });
+
+  renderScheduleDayPanel(selected);
 }
 
 function closeAllDropdowns() {
@@ -472,10 +693,13 @@ function renderDashboard() {
         btn.className = `lesson-slot${ymd === today && viewDate === today ? " highlight" : ""}`;
         const initial = (student.name || "?").charAt(0).toUpperCase();
         const scoreCount = Object.keys(lesson.scores || {}).length;
+        const meta = lessonHasScores(lesson)
+          ? formatLessonTime(lesson)
+          : `${formatLessonTime(lesson)} · ${scoreCount ? `${scoreCount} оценок` : "без оценок"}`;
         btn.innerHTML = `
           <span class="lesson-slot-avatar">${escapeHtml(initial)}</span>
           <span class="lesson-slot-name">${escapeHtml(student.name)}</span>
-          <span class="lesson-slot-meta">Урок · ${scoreCount} оценок</span>`;
+          <span class="lesson-slot-meta">${escapeHtml(meta)}</span>`;
         btn.addEventListener("click", () => openStudent(student.id));
         slotsEl.appendChild(btn);
         if (i === 0 && viewDate === today) btn.classList.add("highlight");
@@ -512,7 +736,7 @@ function showApp(view, options = {}) {
   const resolvedView = view === "home" ? "students" : view;
   document.getElementById("app-shell")?.classList.remove("hidden");
   document.getElementById("view-auth")?.classList.add("hidden");
-  const map = ["students", "student-detail", "analysis", "settings"];
+  const map = ["students", "student-detail", "analysis", "settings", "schedule"];
   map.forEach((v) => {
     const el = document.getElementById(`view-${v}`);
     if (el) el.classList.toggle("hidden", v !== resolvedView);
@@ -610,6 +834,7 @@ document.querySelectorAll("#main-nav .nav-item[data-view]").forEach((btn) => {
     }
     showApp(v, v === "students" ? { scrollTo: "students-panel" } : {});
     if (v === "students") renderStudents();
+    if (v === "schedule") renderSchedule();
     if (v === "analysis") renderAnalysisForm();
     if (v === "settings") renderSettings();
   });
@@ -644,6 +869,7 @@ document.querySelectorAll("#user-menu-panel .dropdown-item[data-goto]").forEach(
     const v = btn.getAttribute("data-goto");
     showApp(v);
     if (v === "students") renderStudents();
+    if (v === "schedule") renderSchedule();
     if (v === "analysis") renderAnalysisForm();
     if (v === "settings") renderSettings();
     closeAllDropdowns();
@@ -661,16 +887,11 @@ document.getElementById("btn-schedule-next")?.addEventListener("click", () => {
 });
 
 document.getElementById("btn-schedule-add")?.addEventListener("click", () => {
-  const pending = state.students.find((s) => !(s.lessons?.length));
-  if (pending) {
-    openStudent(pending.id);
-    return;
-  }
-  if (state.students.length) {
-    openStudent(state.students[0].id);
-    return;
-  }
-  focusAddStudent();
+  uiState.scheduleSelectedDate = uiState.dashboardDate;
+  uiState.scheduleWeekStart = getWeekStartYmd(uiState.dashboardDate);
+  showApp("schedule");
+  renderSchedule();
+  openScheduleAddModal(uiState.dashboardDate);
 });
 
 document.getElementById("btn-aside-add")?.addEventListener("click", focusAddStudent);
@@ -693,8 +914,73 @@ document.querySelectorAll(".dropdown-wrap").forEach((wrap) => {
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     hideHelpModal();
+    hideScheduleAddModal();
     closeAllDropdowns();
   }
+});
+
+document.getElementById("btn-schedule-week-prev")?.addEventListener("click", () => {
+  ensureScheduleState();
+  uiState.scheduleWeekStart = shiftYmd(uiState.scheduleWeekStart, -7);
+  renderSchedule();
+});
+
+document.getElementById("btn-schedule-week-next")?.addEventListener("click", () => {
+  ensureScheduleState();
+  uiState.scheduleWeekStart = shiftYmd(uiState.scheduleWeekStart, 7);
+  renderSchedule();
+});
+
+document.getElementById("btn-schedule-today")?.addEventListener("click", () => {
+  const today = todayYmd();
+  uiState.scheduleWeekStart = getWeekStartYmd(today);
+  uiState.scheduleSelectedDate = today;
+  renderSchedule();
+});
+
+document.getElementById("btn-schedule-page-add")?.addEventListener("click", () => {
+  openScheduleAddModal(uiState.scheduleSelectedDate || todayYmd());
+});
+
+document.getElementById("btn-schedule-day-add")?.addEventListener("click", () => {
+  openScheduleAddModal(uiState.scheduleSelectedDate || todayYmd());
+});
+
+document.getElementById("btn-schedule-add-close")?.addEventListener("click", hideScheduleAddModal);
+document.getElementById("btn-schedule-add-cancel")?.addEventListener("click", hideScheduleAddModal);
+document.getElementById("schedule-add-modal")?.addEventListener("click", (e) => {
+  if (e.target.id === "schedule-add-modal") hideScheduleAddModal();
+});
+
+document.getElementById("btn-schedule-add-submit")?.addEventListener("click", async () => {
+  const sid = document.getElementById("schedule-add-student")?.value;
+  const s = state.students.find((x) => x.id === sid);
+  if (!s) {
+    setScheduleAddMsg("Сначала добавьте ученика в разделе «Ученики».", "error");
+    return;
+  }
+  const dateYmd = document.getElementById("schedule-add-date")?.value?.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateYmd)) {
+    setScheduleAddMsg("Укажите корректную дату.", "error");
+    return;
+  }
+  const timeStart = document.getElementById("schedule-add-time-start")?.value?.trim() || "";
+  const timeEnd = document.getElementById("schedule-add-time-end")?.value?.trim() || "";
+  if (timeStart && timeEnd && timeStart >= timeEnd) {
+    setScheduleAddMsg("Время окончания должно быть позже начала.", "error");
+    return;
+  }
+  if (!s.lessons) s.lessons = [];
+  const lesson = { id: uid(), date: dateYmd, scores: {} };
+  if (timeStart) lesson.timeStart = timeStart;
+  if (timeEnd) lesson.timeEnd = timeEnd;
+  s.lessons.push(lesson);
+  await persist();
+  hideScheduleAddModal();
+  uiState.scheduleSelectedDate = dateYmd;
+  uiState.scheduleWeekStart = getWeekStartYmd(dateYmd);
+  renderSchedule();
+  renderNotifications();
 });
 
 function renderStudents() {
@@ -821,7 +1107,7 @@ function bindScorePillGroup(group) {
   });
 }
 
-function openStudent(id) {
+function openStudent(id, options = {}) {
   const s = state.students.find((x) => x.id === id);
   if (!s) return;
   document.getElementById("current-student-id").value = id;
@@ -842,7 +1128,20 @@ function openStudent(id) {
     critEl.textContent = `${n} ${word}`;
   }
   const dateEl = document.getElementById("lesson-date");
-  if (dateEl) dateEl.value = todayYmd();
+  const timeStartEl = document.getElementById("lesson-time-start");
+  const timeEndEl = document.getElementById("lesson-time-end");
+  if (options.lessonId) {
+    const lesson = s.lessons?.find((l) => l.id === options.lessonId);
+    if (lesson) {
+      if (dateEl) dateEl.value = lessonDateToInputValue(lesson) || options.date || todayYmd();
+      if (timeStartEl) timeStartEl.value = lesson.timeStart || "";
+      if (timeEndEl) timeEndEl.value = lesson.timeEnd || "";
+    }
+  } else {
+    if (dateEl) dateEl.value = options.date || todayYmd();
+    if (timeStartEl) timeStartEl.value = options.timeStart || "";
+    if (timeEndEl) timeEndEl.value = options.timeEnd || "";
+  }
   updateLessonDateDisplay();
   setLessonFormMsg("", "");
   showApp("student-detail");
@@ -891,7 +1190,7 @@ function renderStudentLessons(s) {
   const emptyEl = document.getElementById("lessons-empty");
   const tableWrap = document.getElementById("lessons-table-wrap");
   const crit = state.criteria;
-  thead.innerHTML = `<tr><th>№</th><th>Дата</th>${crit
+  thead.innerHTML = `<tr><th>№</th><th>Дата</th><th>Время</th>${crit
     .map((c) => `<th title="${escapeHtml(c.name)}">${escapeHtml(c.name.length > 22 ? `${c.name.slice(0, 20)}…` : c.name)}</th>`)
     .join("")}<th></th></tr>`;
   tbody.innerHTML = "";
@@ -910,7 +1209,8 @@ function renderStudentLessons(s) {
     const ymd = lessonDateToInputValue(lesson);
     const cells = crit.map((c) => `<td>${scoreBadgeHtml(lesson.scores?.[c.id])}</td>`).join("");
     const dateCell = `<td><span class="date-display">${formatDateRu(ymd)}</span></td>`;
-    tr.innerHTML = `<td>${idx + 1}</td>${dateCell}${cells}<td><button type="button" class="btn btn-danger btn-del-lesson" data-li="${lesson.id}">Удалить</button></td>`;
+    const timeCell = `<td><span class="date-display">${escapeHtml(formatLessonTime(lesson))}</span></td>`;
+    tr.innerHTML = `<td>${idx + 1}</td>${dateCell}${timeCell}${cells}<td><button type="button" class="btn btn-danger btn-del-lesson" data-li="${lesson.id}">Удалить</button></td>`;
     tbody.appendChild(tr);
   });
   tbody.querySelectorAll(".btn-del-lesson").forEach((b) =>
@@ -956,10 +1256,21 @@ document.getElementById("btn-add-lesson").addEventListener("click", async () => 
     setLessonFormMsg("Укажите корректную дату занятия.", "error");
     return;
   }
+  const timeStart = document.getElementById("lesson-time-start")?.value?.trim() || "";
+  const timeEnd = document.getElementById("lesson-time-end")?.value?.trim() || "";
+  if (timeStart && timeEnd && timeStart >= timeEnd) {
+    setLessonFormMsg("Время окончания должно быть позже начала.", "error");
+    return;
+  }
   if (!s.lessons) s.lessons = [];
-  s.lessons.push({ id: uid(), date: dateYmd, scores });
+  const lesson = { id: uid(), date: dateYmd, scores };
+  if (timeStart) lesson.timeStart = timeStart;
+  if (timeEnd) lesson.timeEnd = timeEnd;
+  s.lessons.push(lesson);
   await persist();
   clearLessonScoreInputs();
+  document.getElementById("lesson-time-start").value = "";
+  document.getElementById("lesson-time-end").value = "";
   setLessonFormMsg(`Запись за ${formatDateRu(dateYmd)} добавлена.`, "success");
   renderStudentLessons(s);
   const countEl = document.getElementById("student-lesson-count");
