@@ -1,99 +1,208 @@
-# Приложение. Листинги программного кода и скриптов БД
+# Листинги программного кода и скриптов БД
 
-> Документ для вставки в пояснительную записку / диплом.  
-> Скопируйте нужные блоки в Word: шрифт **Courier New** 10–11 pt, межстрочный интервал 1.0.  
-> Подпись листинга — по ГОСТ: *«Листинг N – …»* — размещается **под** блоком кода.
+> Для вставки в Word: шрифт **Courier New** 10–11 pt, интервал **1.0**.  
+> Подпись — **под** блоком: *«Листинг N – …»*.
 
 ---
 
-## Листинг 1 – Схема базы данных SQLite
+## (обязательное)
+
+### SQL-скрипты
+
+<table>
+<tr>
+<td valign="top" width="50%">
+
+```sql
+-- Создание таблицы "Пользователь"
+CREATE TABLE Пользователь (
+    id INT(10) PRIMARY KEY NOT NULL,
+    login VARCHAR(50) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    created_at DATE NOT NULL,
+    CHECK (id > 0),
+    CHECK (TRIM(login) <> ''),
+    CHECK (TRIM(password) <> '')
+);
+
+-- Создание таблицы "Критерий"
+CREATE TABLE Критерий (
+    id INT(10) PRIMARY KEY NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    user_id INT(10) NOT NULL,
+    CHECK (id > 0),
+    CHECK (TRIM(name) <> ''),
+    CHECK (user_id > 0),
+    FOREIGN KEY (user_id) REFERENCES Пользователь(id)
+);
+
+-- Создание таблицы "Методика"
+CREATE TABLE Методика (
+    id INT(10) PRIMARY KEY NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    user_id INT(10) NOT NULL,
+    CHECK (id > 0),
+    CHECK (TRIM(name) <> ''),
+    CHECK (user_id > 0),
+    FOREIGN KEY (user_id) REFERENCES Пользователь(id)
+);
+
+-- Создание таблицы "Ученик"
+CREATE TABLE Ученик (
+    id INT(10) PRIMARY KEY NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    notes VARCHAR(255),
+    user_id INT(10) NOT NULL,
+    CHECK (id > 0),
+    CHECK (TRIM(name) <> ''),
+    CHECK (user_id > 0),
+    FOREIGN KEY (user_id) REFERENCES Пользователь(id)
+);
+```
+
+</td>
+<td valign="top" width="50%">
+
+```sql
+-- Создание таблицы "Урок"
+CREATE TABLE Урок (
+    id INT(10) PRIMARY KEY NOT NULL,
+    date DATE NOT NULL,
+    student_id INT(10) NOT NULL,
+    CHECK (id > 0),
+    CHECK (TRIM(date) <> ''),
+    CHECK (student_id > 0),
+    FOREIGN KEY (student_id) REFERENCES Ученик(id)
+);
+
+-- Создание таблицы "Оценка урока"
+CREATE TABLE Оценка_урока (
+    id INT(10) PRIMARY KEY NOT NULL,
+    lesson_id INT(10) NOT NULL,
+    criterion_id INT(10) NOT NULL,
+    score INT(2) NOT NULL,
+    CHECK (id > 0),
+    CHECK (score >= 2 AND score <= 5),
+    CHECK (lesson_id > 0),
+    CHECK (criterion_id > 0),
+    FOREIGN KEY (lesson_id) REFERENCES Урок(id),
+    FOREIGN KEY (criterion_id) REFERENCES Критерий(id)
+);
+
+-- Создание таблицы "Подходящесть методики"
+CREATE TABLE Подходящесть_методики (
+    id INT(10) PRIMARY KEY NOT NULL,
+    method_id INT(10) NOT NULL,
+    criterion_id INT(10) NOT NULL,
+    score INT(2) NOT NULL,
+    CHECK (id > 0),
+    CHECK (score >= 2 AND score <= 5),
+    CHECK (method_id > 0),
+    CHECK (criterion_id > 0),
+    FOREIGN KEY (method_id) REFERENCES Методика(id),
+    FOREIGN KEY (criterion_id) REFERENCES Критерий(id)
+);
+
+-- Создание таблицы "Профиль пользователя"
+CREATE TABLE Профиль_пользователя (
+    id INT(10) PRIMARY KEY NOT NULL,
+    user_id INT(10) NOT NULL,
+    criteria_json TEXT NOT NULL,
+    methods_json TEXT NOT NULL,
+    students_json TEXT NOT NULL,
+    updated_at DATE NOT NULL,
+    CHECK (id > 0),
+    CHECK (user_id > 0),
+    CHECK (TRIM(criteria_json) <> ''),
+    CHECK (TRIM(methods_json) <> ''),
+    FOREIGN KEY (user_id) REFERENCES Пользователь(id)
+);
+```
+
+</td>
+</tr>
+</table>
+
+*Листинг 1 – SQL-скрипты создания таблиц базы данных*
+
+---
+
+## Листинг 2 – Скрипты SQLite (реализация)
 
 **Файл:** `database/schema.sql`
 
 ```sql
--- Схема базы данных SQLite
--- Приложение: подбор методики преподавания (МАИ)
-
-PRAGMA foreign_keys = ON;
-
+-- Создание таблицы "Пользователь"
 CREATE TABLE IF NOT EXISTS users (
-  login         TEXT PRIMARY KEY,
-  password_hash TEXT NOT NULL,
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    login         TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (TRIM(login) <> '')
 );
 
+-- Создание таблицы "Профиль пользователя"
 CREATE TABLE IF NOT EXISTS user_profiles (
-  login               TEXT PRIMARY KEY
-                      REFERENCES users(login) ON DELETE CASCADE,
-  criteria            TEXT NOT NULL DEFAULT '[]',
-  methods             TEXT NOT NULL DEFAULT '[]',
-  criteria_importance TEXT NOT NULL DEFAULT '[]',
-  method_scores       TEXT NOT NULL DEFAULT '[]',
-  local_matrices      TEXT,
-  students            TEXT NOT NULL DEFAULT '[]',
-  updated_at          TEXT NOT NULL DEFAULT (datetime('now'))
+    login               TEXT PRIMARY KEY,
+    criteria            TEXT NOT NULL DEFAULT '[]',
+    methods             TEXT NOT NULL DEFAULT '[]',
+    criteria_importance TEXT NOT NULL DEFAULT '[]',
+    method_scores       TEXT NOT NULL DEFAULT '[]',
+    local_matrices      TEXT,
+    students            TEXT NOT NULL DEFAULT '[]',
+    updated_at          TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (login) REFERENCES users(login) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_profiles_updated
-  ON user_profiles(updated_at);
+    ON user_profiles(updated_at);
 ```
+
+*Листинг 2 – SQL-скрипты SQLite*
 
 ---
 
-## Листинг 2 – Примеры SQL-запросов приложения
+## Листинг 3 – Примеры SQL-запросов
 
 **Файл:** `database/queries.sql`
 
 ```sql
--- Загрузка состояния пользователя (GET /api/me)
+-- Загрузка данных пользователя
 SELECT
-  p.criteria,
-  p.methods,
-  p.criteria_importance,
-  p.method_scores,
-  p.local_matrices,
-  p.students
+    p.criteria,
+    p.methods,
+    p.criteria_importance,
+    p.method_scores,
+    p.local_matrices,
+    p.students
 FROM user_profiles p
 INNER JOIN users u ON u.login = p.login
 WHERE p.login = ?;
 
--- Сохранение состояния (PUT /api/me)
+-- Сохранение данных пользователя
 UPDATE user_profiles
 SET
-  criteria = ?,
-  methods = ?,
-  criteria_importance = ?,
-  method_scores = ?,
-  local_matrices = ?,
-  students = ?,
-  updated_at = datetime('now')
+    criteria = ?,
+    methods = ?,
+    criteria_importance = ?,
+    method_scores = ?,
+    local_matrices = ?,
+    students = ?,
+    updated_at = datetime('now')
 WHERE login = ?;
 
--- Авторизация: получение хеша пароля
+-- Авторизация
 SELECT password_hash FROM users WHERE login = ?;
 ```
 
+*Листинг 3 – Примеры SQL-запросов приложения*
+
 ---
 
-## Листинг 3 – Модуль доступа к базе данных
+## Листинг 4 – Модуль доступа к базе данных
 
 **Файл:** `server/store.js`
 
 ```javascript
-import { getDb } from "./db.js";
-import { createDefaultUserState } from "./defaultUserState.js";
-
-function rowToPayload(row) {
-  return {
-    criteria: JSON.parse(row.criteria),
-    methods: JSON.parse(row.methods),
-    criteriaImportance: JSON.parse(row.criteria_importance),
-    methodScores: JSON.parse(row.method_scores),
-    students: JSON.parse(row.students),
-    ...(row.local_matrices ? { localMatrices: JSON.parse(row.local_matrices) } : {}),
-  };
-}
-
 export function getUserPayload(login) {
   const db = getDb();
   const row = db.prepare(`
@@ -125,50 +234,11 @@ export function saveUserPayload(login, payload) {
 }
 ```
 
----
-
-## Листинг 4 – Инициализация подключения к SQLite
-
-**Файл:** `server/db.js`
-
-```javascript
-import Database from "better-sqlite3";
-
-export function getDb() {
-  if (!db) {
-    ensureDir();
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
-    initSchema(db);
-  }
-  return db;
-}
-
-function initSchema(database) {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      login TEXT PRIMARY KEY,
-      password_hash TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS user_profiles (
-      login TEXT PRIMARY KEY REFERENCES users(login) ON DELETE CASCADE,
-      criteria TEXT NOT NULL DEFAULT '[]',
-      methods TEXT NOT NULL DEFAULT '[]',
-      criteria_importance TEXT NOT NULL DEFAULT '[]',
-      method_scores TEXT NOT NULL DEFAULT '[]',
-      local_matrices TEXT,
-      students TEXT NOT NULL DEFAULT '[]',
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-}
-```
+*Листинг 4 – Модуль доступа к базе данных*
 
 ---
 
-## Листинг 5 – REST API сервера (авторизация и данные)
+## Листинг 5 – REST API сервера
 
 **Файл:** `server.js`
 
@@ -208,20 +278,20 @@ app.put("/api/me", authMiddleware, (req, res) => {
 });
 ```
 
+*Листинг 5 – REST API сервера*
+
 ---
 
-## Листинг 6 – Расчёт дефицита и матрицы парных сравнений (МАИ)
+## Листинг 6 – Алгоритм МАИ (расчёт дефицита и CR)
 
 **Файл:** `js/ahp.js`
 
 ```javascript
-/** Дефицит: 10 − оценка + 1 */
 export function deficitFromScore(score1to10) {
   const s = Math.max(1, Math.min(10, Number(score1to10) || 5));
   return 10 - s + 1;
 }
 
-/** Матрица парных сравнений из вектора дефицитов / подходящести */
 export function buildPairwiseMatrixFromVector(values) {
   const n = values.length;
   const safe = values.map((v) => Math.max(Number(v) || 1, 1e-6));
@@ -236,7 +306,6 @@ export function buildPairwiseMatrixFromVector(values) {
   return A;
 }
 
-/** Собственный вектор матрицы (метод степенных итераций) */
 export function principalEigenvector(A, eps = 1e-10) {
   const n = A.length;
   let w = Array(n).fill(1 / n);
@@ -251,7 +320,6 @@ export function principalEigenvector(A, eps = 1e-10) {
   return { w, lambdaMax };
 }
 
-/** Индекс согласованности CR = CI / RI */
 export function consistencyRatio(A, lambdaMax, n) {
   if (n <= 2) return 0;
   const CI = (lambdaMax - n) / (n - 1);
@@ -260,9 +328,11 @@ export function consistencyRatio(A, lambdaMax, n) {
 }
 ```
 
+*Листинг 6 – Алгоритм МАИ: дефицит, матрицы, CR*
+
 ---
 
-## Листинг 7 – Полный алгоритм рекомендации методики (МАИ)
+## Листинг 7 – Рекомендация методики (МАИ)
 
 **Файл:** `js/ahp.js`, функция `runAhpAnalysis`
 
@@ -271,23 +341,19 @@ export function runAhpAnalysis({ lessons, criterionIds, localMatrices }) {
   const k = criterionIds.length;
   const m = localMatrices[0]?.length ?? 0;
 
-  // Шаг 3.1–3.2: оценки → дефицит → матрица критериев
   const scores10 = aggregateStudentScores1To10(lessons, criterionIds);
   const deficits = scores10.map(deficitFromScore);
   const criteriaMatrix = buildPairwiseMatrixFromVector(deficits);
 
-  // Шаг 3.3–3.4: веса критериев и проверка CR
   const { w: critW, lambdaMax: critLambda } = principalEigenvector(criteriaMatrix);
   const criteriaCR = consistencyRatio(criteriaMatrix, critLambda, k);
 
-  // Шаг 3.5: локальные приоритеты методик по каждому критерию
   const localPriorities = [];
   for (let ci = 0; ci < k; ci++) {
     const { w } = principalEigenvector(localMatrices[ci]);
     localPriorities.push(w);
   }
 
-  // Шаг 3.6–3.7: глобальные приоритеты и выбор лучшей методики
   const global = Array(m).fill(0);
   for (let mi = 0; mi < m; mi++) {
     for (let ci = 0; ci < k; ci++) {
@@ -301,4 +367,4 @@ export function runAhpAnalysis({ lessons, criterionIds, localMatrices }) {
 }
 ```
 
-
+*Листинг 7 – Алгоритм рекомендации методики обучения*
