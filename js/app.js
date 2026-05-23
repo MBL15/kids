@@ -1,4 +1,4 @@
-import { principalEigenvector } from "./ahp.js";
+import { methodScoresToLocalMatrices } from "./ahp.js";
 import { ENTITY_RELATIONS } from "./analysis/dataLogicalModel.js";
 import { runFunctionalScoreAnalysis, FUNCTIONAL_PIPELINE_OVERVIEW } from "./analysis/functionalAnalysisModel.js";
 import { SCORE_MIN, SCORE_MAX, SCORE_DEFAULT } from "./data.js";
@@ -10,8 +10,6 @@ import {
 } from "./studentRadar.js";
 
 const TOKEN_KEY = "ahp_token";
-/** Фиксированный коэффициент β (учёт слабых сторон) — без поля в интерфейсе */
-const BETA_WEIGHT_ADJUST = 0.6;
 
 /** Приводит к шкале 2–5; значения 1–10 (старый формат) переводит линейно. */
 function normalizeStoredScore(v) {
@@ -78,7 +76,7 @@ const HELP_CONTENT = {
     title: "Документация",
     html: `
       <h3>Назначение</h3>
-      <p>Приложение помогает подобрать методику преподавания на основе оценок ученика и правил AHP (анализ иерархий).</p>
+      <p>Приложение использует метод анализа иерархий (МАИ): оценки ученика 1–10, дефицит, матрицы сравнений, CR и глобальные приоритеты методик.</p>
       <h3>Быстрый старт</h3>
       <ol>
         <li>Добавьте ученика на главной странице.</li>
@@ -99,9 +97,9 @@ const HELP_CONTENT = {
     title: "Частые вопросы",
     html: `
       <h3>Где хранятся данные?</h3>
-      <p>На сервере в файле <code>data/store.json</code>. Каждый пользователь видит только свои данные.</p>
+      <p>На сервере в базе SQLite (<code>data/app.db</code>). Каждый пользователь видит только свои данные.</p>
       <h3>Какая шкала оценок?</h3>
-      <p>И оценки уроков, и важность критериев используют шкалу от 2 до 5.</p>
+      <p>На уроках — 2–5; при анализе переводится в 1–10. Дефицит = 10 − оценка + 1. Таблица в «Правила» задаёт матрицы сравнения методик.</p>
       <h3>Когда появится рекомендация?</h3>
       <p>После добавления хотя бы одного урока с оценками — в разделе «Анализ» выберите ученика и нажмите «Выполнить анализ».</p>
       <h3>Можно ли перенести настройки?</h3>
@@ -132,7 +130,7 @@ async function api(method, path, body) {
 }
 
 /**
- * Матрицы Саати → шкала 2–5; старые значения 1–10 → 2–5.
+ * Нормализация правил и построение локальных матриц МАИ из таблицы подходящести.
  */
 function migrateAndNormalize(s) {
   const k = s.criteria.length;
@@ -140,37 +138,9 @@ function migrateAndNormalize(s) {
   if (k === 0 || m === 0) {
     s.criteriaImportance = [];
     s.methodScores = [];
+    s.localMatrices = [];
     delete s.criteriaMatrix;
-    delete s.localMatrices;
     return;
-  }
-
-  if (
-    Array.isArray(s.criteriaMatrix) &&
-    s.criteriaMatrix.length === k &&
-    Array.isArray(s.localMatrices) &&
-    s.localMatrices.length === k
-  ) {
-    try {
-      const { w: critW } = principalEigenvector(s.criteriaMatrix);
-      s.criteriaImportance = critW.map((w) =>
-        Math.max(SCORE_MIN, Math.min(SCORE_MAX, Math.round(SCORE_MIN + w * (SCORE_MAX - SCORE_MIN))))
-      );
-      s.methodScores = s.methods.map((_, mi) =>
-        s.criteria.map((_, ci) => {
-          const { w } = principalEigenvector(s.localMatrices[ci]);
-          return Math.max(
-            SCORE_MIN,
-            Math.min(SCORE_MAX, Math.round(SCORE_MIN + w[mi] * (SCORE_MAX - SCORE_MIN)))
-          );
-        })
-      );
-    } catch {
-      s.criteriaImportance = s.criteria.map(() => SCORE_DEFAULT);
-      s.methodScores = s.methods.map(() => s.criteria.map(() => SCORE_DEFAULT));
-    }
-    delete s.criteriaMatrix;
-    delete s.localMatrices;
   }
 
   if (!Array.isArray(s.criteriaImportance)) s.criteriaImportance = [];
@@ -193,6 +163,21 @@ function migrateAndNormalize(s) {
       s.methodScores[i][j] = normalizeStoredScore(s.methodScores[i][j]);
     }
   }
+
+  const built = methodScoresToLocalMatrices(s.methodScores);
+  const hasValidStored =
+    Array.isArray(s.localMatrices) &&
+    s.localMatrices.length === k &&
+    s.localMatrices.every((mat) => Array.isArray(mat) && mat.length === m && mat.every((row) => row.length === m));
+  if (!hasValidStored) {
+    s.localMatrices = built;
+  }
+  delete s.criteriaMatrix;
+}
+
+function getLocalMatrices() {
+  migrateAndNormalize(state);
+  return state.localMatrices;
 }
 
 async function bootstrapSession() {
@@ -220,11 +205,14 @@ async function bootstrapSession() {
 
 async function persist() {
   if (!getToken()) return;
+  migrateAndNormalize(state);
+  state.localMatrices = methodScoresToLocalMatrices(state.methodScores);
   const res = await api("PUT", "/api/me", {
     criteria: state.criteria,
     methods: state.methods,
     criteriaImportance: state.criteriaImportance,
     methodScores: state.methodScores,
+    localMatrices: state.localMatrices,
     students: state.students,
   });
   if (!res.ok) {
@@ -1335,17 +1323,36 @@ function renderAnalysisForm() {
   setAnalysisEmptyVisible(true);
 }
 
-function renderAnalysisResult(student, beta) {
+function crBadgeHtml(cr, consistent) {
+  const cls = consistent ? "cr-ok" : "cr-bad";
+  const icon = consistent ? "✅" : "⚠️";
+  const text = consistent ? "согласовано" : "противоречия";
+  return `<span class="cr-badge ${cls}">${icon} CR ${cr.toFixed(3)} — ${text}</span>`;
+}
+
+function renderAnalysisResult(student) {
   migrateAndNormalize(state);
   const critIds = state.criteria.map((c) => c.id);
   const lessons = student.lessons || [];
+  const localMatrices = getLocalMatrices();
 
-  const { perf, baseW, wAdj, global, bestIdx, steps, marginFirstSecond } = runFunctionalScoreAnalysis({
+  const {
+    scores10,
+    deficits,
+    critW,
+    criteriaCR,
+    criteriaConsistent,
+    localPriorities,
+    localCR,
+    localConsistent,
+    global,
+    bestIdx,
+    steps,
+    marginFirstSecond,
+  } = runFunctionalScoreAnalysis({
     criterionIds: critIds,
     lessons,
-    criteriaImportance: state.criteriaImportance,
-    methodScores: state.methodScores,
-    beta,
+    localMatrices,
   });
 
   const bestMethod = state.methods[bestIdx];
@@ -1371,16 +1378,32 @@ function renderAnalysisResult(student, beta) {
     )
     .join("");
 
-  const criteriaMetrics = state.criteria
+  const studentScoresHtml = state.criteria
     .map(
       (c, i) => `
     <div class="analysis-metric">
       ${escapeHtml(c.name)}
-      <strong>${(perf[i] ?? 0).toFixed(2)}</strong>
-      <span class="diagram-ref">уровень 0–1</span>
+      <strong>${scores10[i].toFixed(1)}</strong>
+      <span class="diagram-ref">дефицит ${deficits[i].toFixed(1)} · вес ${(critW[i] * 100).toFixed(1)}%</span>
     </div>`
     )
     .join("");
+
+  const localTableHead = `<tr><th>Методика</th>${state.criteria
+    .map((c) => `<th>${escapeHtml(c.name)}</th>`)
+    .join("")}</tr>`;
+  const localTableBody = state.methods
+    .map((m, mi) => {
+      const cells = state.criteria
+        .map((_, ci) => `<td>${(localPriorities[ci][mi] * 100).toFixed(1)}%</td>`)
+        .join("");
+      return `<tr><td>${escapeHtml(m.name)}</td>${cells}</tr>`;
+    })
+    .join("");
+
+  const localCrHtml = state.criteria
+    .map((c, i) => `${escapeHtml(c.name)}: ${crBadgeHtml(localCR[i], localConsistent[i])}`)
+    .join("<br />");
 
   const pipelineHtml = steps
     .map(
@@ -1394,20 +1417,20 @@ function renderAnalysisResult(student, beta) {
 
   let html = `
     <div class="analysis-recommendation">
-      <div class="analysis-recommendation-label">Рекомендуемая методика</div>
+      <div class="analysis-recommendation-label">Рекомендуемая методика (МАИ)</div>
       <p class="analysis-recommendation-method">${escapeHtml(bestMethod.name)}</p>
       <div class="analysis-recommendation-meta">
         <span class="analysis-meta-chip">Ученик: <strong>${escapeHtml(student.name)}</strong></span>
-        <span class="analysis-meta-chip">Уроков: <strong>${lessons.length}</strong></span>
+        <span class="analysis-meta-chip">Приоритет: <strong>${(global[bestIdx] * 100).toFixed(1)}%</strong></span>
         <span class="analysis-meta-chip">Уверенность: <strong>${confidence}</strong></span>
       </div>
     </div>
 
     <div class="analysis-stats-grid">
       <div class="analysis-stat-card">
-        <span class="analysis-stat-label">Приоритет лидера</span>
+        <span class="analysis-stat-label">Глобальный приоритет</span>
         <span class="analysis-stat-value">${(global[bestIdx] * 100).toFixed(1)}%</span>
-        <span class="analysis-stat-caption">доля итогового веса</span>
+        <span class="analysis-stat-caption">${escapeHtml(bestMethod.name)}</span>
       </div>
       <div class="analysis-stat-card">
         <span class="analysis-stat-label">Разрыв с 2-м местом</span>
@@ -1415,30 +1438,46 @@ function renderAnalysisResult(student, beta) {
         <span class="analysis-stat-caption">процентных пунктов</span>
       </div>
       <div class="analysis-stat-card">
-        <span class="analysis-stat-label">Шкала оценок</span>
-        <span class="analysis-stat-value">${SCORE_MIN}–${SCORE_MAX}</span>
-        <span class="analysis-stat-caption">критерии и уроки</span>
+        <span class="analysis-stat-label">Согласованность критериев</span>
+        <span class="analysis-stat-value">${criteriaCR.toFixed(3)}</span>
+        <span class="analysis-stat-caption">${criteriaConsistent ? "CR < 0.1 ✅" : "CR ≥ 0.1 ⚠️"}</span>
       </div>
+    </div>
+
+    <div class="analysis-card">
+      <h3 class="analysis-card-title">Оценки ученика и веса критериев (1–10)</h3>
+      <p class="form-hint">Дефицит = 10 − оценка + 1. Веса критериев вычислены из матрицы дефицитов.</p>
+      <div class="analysis-metrics-grid">${studentScoresHtml}</div>
+      <p style="margin-top:0.75rem">${crBadgeHtml(criteriaCR, criteriaConsistent)}</p>
     </div>
 
     <div class="analysis-grid-2">
       <div class="analysis-card">
-        <h3 class="analysis-card-title">Рейтинг методик</h3>
+        <h3 class="analysis-card-title">Глобальный рейтинг методик</h3>
         <ul class="method-rank-list">${rankHtml}</ul>
       </div>
       <div class="analysis-card analysis-radar-card">
-        <h3 class="analysis-card-title">Доли приоритетов (радар)</h3>
+        <h3 class="analysis-card-title">Доли глобальных приоритетов</h3>
         <div class="analysis-radar-wrap radar-canvas-box">
           <canvas id="analysis-method-radar" aria-label="Радар приоритетов методик"></canvas>
         </div>
       </div>
     </div>
 
+    <div class="analysis-card">
+      <h3 class="analysis-card-title">Локальные приоритеты методик по критериям</h3>
+      <div class="table-wrap">
+        <table class="local-priorities-table">
+          <thead>${localTableHead}</thead>
+          <tbody>${localTableBody}</tbody>
+        </table>
+      </div>
+      <p class="diagram-ref" style="margin-top:0.75rem">CR по критериям:</p>
+      <p class="diagram-ref">${localCrHtml}</p>
+    </div>
+
     <details class="analysis-details">
-      <summary>Детали расчёта (F1–F6)</summary>
-      <p class="diagram-ref" style="margin-top:0.75rem">Уровень успеваемости по критериям:</p>
-      <div class="analysis-metrics-grid">${criteriaMetrics}</div>
-      <p class="diagram-ref">Веса критериев: ${state.criteria.map((c, i) => `${escapeHtml(c.name)} ${(baseW[i] * 100).toFixed(1)}% → ${(wAdj[i] * 100).toFixed(1)}%`).join(" · ")}</p>
+      <summary>Шаги расчёта МАИ (F1–F6)</summary>
       <ul class="analysis-pipeline">${pipelineHtml}</ul>
     </details>`;
 
@@ -1479,7 +1518,7 @@ document.getElementById("btn-run-analysis").addEventListener("click", () => {
     });
     return;
   }
-  renderAnalysisResult(student, BETA_WEIGHT_ADJUST);
+  renderAnalysisResult(student);
 });
 
 function renderSettings() {
@@ -1495,7 +1534,7 @@ function renderSettings() {
     const imp = state.criteriaImportance[ci] ?? SCORE_DEFAULT;
     row.innerHTML = `
       <input type="text" data-ci="${ci}" class="crit-name" value="${escapeHtml(c.name)}" />
-      <label class="importance-label">Важность <span class="importance-val" id="imp-val-${ci}">${imp}</span></label>
+      <label class="importance-label">Справ. важность <span class="importance-val" id="imp-val-${ci}">${imp}</span></label>
       <input type="range" min="${SCORE_MIN}" max="${SCORE_MAX}" step="1" data-ci="${ci}" class="crit-imp" value="${imp}" />
       <button type="button" class="btn btn-danger btn-rm-crit" data-ci="${ci}" ${state.criteria.length <= 1 ? "disabled" : ""}>Удалить</button>
     `;

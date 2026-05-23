@@ -1,3 +1,7 @@
 node_modules/
 data/store.json
+data/store.json.migrated
+data/app.db
+data/app.db-wal
+data/app.db-shm
 .env

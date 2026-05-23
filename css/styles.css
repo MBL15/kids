@@ -2207,6 +2207,40 @@ ul.inline-actions {
   margin: 0 1.75rem 1.75rem;
 }
 
+.cr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.cr-badge.cr-ok {
+  background: rgba(52, 199, 89, 0.12);
+  color: #1e7e34;
+  border: 1px solid rgba(52, 199, 89, 0.25);
+}
+
+.cr-badge.cr-bad {
+  background: rgba(255, 149, 0, 0.12);
+  color: #b86e00;
+  border: 1px solid rgba(255, 149, 0, 0.25);
+}
+
+.local-priorities-table td,
+.local-priorities-table th {
+  text-align: center;
+  font-size: 0.82rem;
+}
+
+.local-priorities-table td:first-child,
+.local-priorities-table th:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
 @media (max-width: 900px) {
   .analysis-stats-grid {
     grid-template-columns: 1fr;

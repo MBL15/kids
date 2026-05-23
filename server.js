@@ -10,6 +10,7 @@ import {
   getPasswordHash,
   saveUserPayload,
 } from "./server/store.js";
+import { getDb, closeDb } from "./server/db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PORT = Number(process.env.PORT) || 3000;
@@ -81,20 +82,16 @@ app.put("/api/me", authMiddleware, (req, res) => {
   if (!body || typeof body !== "object") {
     return res.status(400).json({ error: "Неверное тело запроса" });
   }
-  const { criteria, methods, criteriaImportance, methodScores, students } = body;
+  const { criteria, methods, criteriaImportance, methodScores, localMatrices, students } = body;
   if (!Array.isArray(criteria) || !Array.isArray(methods) || !Array.isArray(students)) {
     return res.status(400).json({ error: "Ожидаются criteria, methods, students (массивы)" });
   }
   if (!Array.isArray(criteriaImportance) || !Array.isArray(methodScores)) {
     return res.status(400).json({ error: "Ожидаются criteriaImportance и methodScores" });
   }
-  const ok = saveUserPayload(req.login, {
-    criteria,
-    methods,
-    criteriaImportance,
-    methodScores,
-    students,
-  });
+  const payload = { criteria, methods, criteriaImportance, methodScores, students };
+  if (Array.isArray(localMatrices)) payload.localMatrices = localMatrices;
+  const ok = saveUserPayload(req.login, payload);
   if (!ok) {
     return res.status(500).json({ error: "Не удалось сохранить" });
   }
@@ -118,6 +115,7 @@ app.get("*", (_req, res) => {
 });
 
 function startServer(port, attempt = 0) {
+  getDb();
   const server = http.createServer(app);
   server.once("error", (err) => {
     if (err.code === "EADDRINUSE" && attempt < PORT_ATTEMPTS) {
@@ -132,7 +130,18 @@ function startServer(port, attempt = 0) {
     server.removeAllListeners("error");
     server.on("error", (e) => console.error("Ошибка сервера:", e));
     console.log(`Сервер: http://localhost:${port}`);
+    console.log(`База данных: SQLite (data/app.db)`);
   });
 }
+
+process.on("SIGINT", () => {
+  closeDb();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  closeDb();
+  process.exit(0);
+});
 
 startServer(DEFAULT_PORT);

@@ -1,147 +1,124 @@
 /**
- * Функциональная модель анализа оценок: декомпозиция на функции (поток обработки данных).
- * Каждый шаг имеет вход, выход и назначение в терминах предметной области.
+ * Функциональная модель расчёта МАИ (шаги 3.1–3.7).
  */
 
-import { aggregateLessonScores, adjustCriteriaWeightsForChild, normalizeVector } from "../ahp.js";
-import { algorithmRecommendTeachingMethod } from "./recommendationAlgorithms.js";
+import { algorithmRecommendTeachingMethodAhp } from "./recommendationAlgorithms.js";
 
-/** Краткое описание конвейера для экрана «Анализ» (без числовых результатов). */
 export const FUNCTIONAL_PIPELINE_OVERVIEW = [
   {
     id: "F1",
-    title: "Формирование аналитического контекста",
-    detail: "Выбор ученика, загрузка уроков с оценками и профиля правил (критерии, методики, веса).",
+    title: "Оценка ученика по критериям",
+    detail: "Агрегация оценок уроков в шкалу 1–10 по каждому критерию (теория, графики, задачи и т.д.).",
   },
   {
     id: "F2",
-    title: "Агрегирование оценок занятий",
-    detail: "По всем урокам вычисляется уровень по каждому критерию в шкале 0…1.",
+    title: "Расчёт дефицита знаний",
+    detail: "Дефицит = 10 − оценка + 1. Чем ниже оценка, тем выше дефицит и важность улучшения.",
   },
   {
     id: "F3",
-    title: "Нормализация важности критериев",
-    detail: "Заданная важность (2–5) переводится в базовые относительные веса.",
+    title: "Матрица критериев и веса",
+    detail: "Попарное сравнение критериев через дефициты; собственный вектор матрицы → веса (сумма 100%).",
   },
   {
     id: "F4",
-    title: "Корректировка весов по профилю ученика",
-    detail: "Вес критериев с более низким уровнем усиливается (параметр β).",
+    title: "Проверка согласованности (CR)",
+    detail: "CR < 0.1 — согласованность достигнута; иначе данные противоречивы.",
   },
   {
     id: "F5",
-    title: "Синтез приоритетов методик",
-    detail: "Для каждой методики считается итоговый приоритет с учётом матрицы «методика × критерий».",
+    title: "Локальные приоритеты методик",
+    detail: "Для каждого критерия — матрица сравнения методик и её собственный вектор.",
   },
   {
     id: "F6",
-    title: "Рекомендация",
-    detail: "Выбирается методика с наибольшим глобальным приоритетом.",
+    title: "Глобальные приоритеты",
+    detail: "Σ (вес критерия × локальный приоритет методики). Максимум → рекомендация.",
   },
 ];
 
 /**
- * @typedef {Object} FunctionalStep
- * @property {string} id
- * @property {string} title
- * @property {string} input
- * @property {string} output
- * @property {object} [data] — промежуточный результат для отчёта
- */
-
-/**
- * Выполняет полный конвейер анализа по функциональной модели.
- *
- * F1 — загрузка контекста (ученик, уроки, правила).
- * F2 — агрегирование оценок уроков по критериям → уровень успешности 0…1.
- * F3 — нормализация заданной важности критериев → базовые веса.
- * F4 — корректировка весов с учётом «слабых» критериев (β).
- * F5 — синтез глобальных приоритетов методик (взвешенная сумма локальных приоритетов).
- * F6 — выбор методики с максимальным приоритетом.
- *
  * @param {object} ctx
- * @param {string[]} ctx.criterionIds — порядок критериев
+ * @param {string[]} ctx.criterionIds
  * @param {import("./dataLogicalModel.js").LessonRecord[]} ctx.lessons
- * @param {number[]} ctx.criteriaImportance
- * @param {number[][]} ctx.methodScores
- * @param {number} ctx.beta
+ * @param {number[][]} ctx.localMatrices
  */
 export function runFunctionalScoreAnalysis(ctx) {
-  const { criterionIds, lessons, criteriaImportance, methodScores, beta } = ctx;
+  const { criterionIds, lessons, localMatrices } = ctx;
+  const result = algorithmRecommendTeachingMethodAhp({ lessons, criterionIds, localMatrices });
 
   const steps = [];
 
   steps.push({
     id: "F1",
-    title: "Формирование аналитического контекста",
-    input: "Список уроков с оценками по критериям; матрица правил (важность, «подходит»).",
-    output: "Набор данных для расчёта.",
-    data: { lessonCount: lessons.length, criterionCount: criterionIds.length, methodCount: methodScores.length },
+    title: "Оценка ученика по критериям (1–10)",
+    input: "Оценки по урокам для каждого критерия.",
+    output: `Средние оценки: ${result.scores10.map((s) => s.toFixed(1)).join(", ")}.`,
+    data: { scores10: result.scores10, criterionIds },
   });
 
-  const perf = aggregateLessonScores(lessons, criterionIds);
   steps.push({
     id: "F2",
-    title: "Агрегирование оценок занятий по критериям",
-    input: "Оценки 2–5 (или наследие 0–100) по каждому уроку и критерию.",
-    output: "Вектор уровня по критериям в [0, 1] (выше — сильнее ребёнок по критерию).",
-    data: { perf, criterionIds },
+    title: "Расчёт дефицита знаний",
+    input: "Оценки 1–10.",
+    output: `Дефициты: ${result.deficits.map((d) => d.toFixed(1)).join(", ")}.`,
+    data: { deficits: result.deficits },
   });
 
-  const baseW = normalizeVector(criteriaImportance.map((x) => Math.max(0.01, Number(x) || 1)));
   steps.push({
     id: "F3",
-    title: "Нормализация важности критериев",
-    input: "Шкала важности 2–5 по каждому критерию.",
-    output: "Базовые относительные веса критериев (сумма = 1).",
-    data: { baseW },
+    title: "Матрица критериев и веса",
+    input: "Дефициты критериев → попарные отношения.",
+    output: `Веса: ${result.critW.map((w) => `${(w * 100).toFixed(1)}%`).join(", ")}.`,
+    data: { critW: result.critW, criteriaMatrix: result.criteriaMatrix },
   });
 
-  const wAdj = adjustCriteriaWeightsForChild(baseW, perf, beta);
   steps.push({
     id: "F4",
-    title: "Корректировка весов по профилю ученика",
-    input: "Базовые веса, уровень perf, коэффициент β.",
-    output: "Скорректированные веса (усиление веса критериев с низким perf).",
-    data: { wAdj, beta },
+    title: "Проверка согласованности (CR)",
+    input: "Матрица критериев.",
+    output: `CR = ${result.criteriaCR.toFixed(3)} (${result.criteriaConsistent ? "согласовано" : "есть противоречия"}).`,
+    data: { criteriaCR: result.criteriaCR, criteriaConsistent: result.criteriaConsistent },
   });
-
-  const recommendation = algorithmRecommendTeachingMethod(wAdj, methodScores);
-  const global = recommendation.globalPriorities;
-  const bestIdx = recommendation.bestIndex;
 
   steps.push({
     id: "F5",
-    title: "Синтез приоритетов методик (алгоритм взвешенного синтеза)",
-    input: "Скорректированные веса критериев; матрица «методика × критерий».",
-    output: "Вектор глобальных приоритетов альтернатив (методик), сумма = 1.",
+    title: "Локальные приоритеты методик",
+    input: "Матрицы сравнения методик по каждому критерию.",
+    output: `${result.localPriorities.length} локальных векторов приоритетов.`,
     data: {
-      global,
-      marginFirstSecond: recommendation.marginFirstSecond,
-      ranking: recommendation.ranking,
+      localPriorities: result.localPriorities,
+      localCR: result.localCR,
+      localConsistent: result.localConsistent,
     },
   });
 
   steps.push({
     id: "F6",
-    title: "Выбор предпочитаемой методики (arg max + ранжирование)",
-    input: "Глобальные приоритеты методик.",
-    output: "Индекс и приоритет лучшей методики; приоритеты остальных по убыванию.",
+    title: "Глобальные приоритеты и рекомендация",
+    input: "Веса критериев × локальные приоритеты.",
+    output: `Лучшая методика: индекс ${result.bestIdx}, приоритет ${(result.globalPriorities[result.bestIdx] * 100).toFixed(1)}%.`,
     data: {
-      bestIdx,
-      bestPriority: recommendation.bestPriority,
-      marginFirstSecond: recommendation.marginFirstSecond,
+      global: result.globalPriorities,
+      bestIdx: result.bestIdx,
+      marginFirstSecond: result.marginFirstSecond,
+      ranking: result.ranking,
     },
   });
 
   return {
-    perf,
-    baseW,
-    wAdj,
-    global,
-    bestIdx,
-    marginFirstSecond: recommendation.marginFirstSecond,
-    ranking: recommendation.ranking,
+    scores10: result.scores10,
+    deficits: result.deficits,
+    critW: result.critW,
+    criteriaCR: result.criteriaCR,
+    criteriaConsistent: result.criteriaConsistent,
+    localPriorities: result.localPriorities,
+    localCR: result.localCR,
+    localConsistent: result.localConsistent,
+    global: result.globalPriorities,
+    bestIdx: result.bestIdx,
+    marginFirstSecond: result.marginFirstSecond,
+    ranking: result.ranking,
     steps,
   };
 }

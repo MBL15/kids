@@ -1,69 +1,31 @@
 /**
- * Даталогическая модель данных для анализа оценок.
- * Описывает сущности, атрибуты и связи (концептуальный уровень без привязки к СУБД).
- */
-
-/**
- * @typedef {Object} Criterion
- * @property {string} id
- * @property {string} name
- */
-
-/**
- * @typedef {Object} TeachingMethod
- * @property {string} id
- * @property {string} name
+ * Даталогическая модель данных для анализа оценок (МАИ).
  */
 
 /**
  * @typedef {Object} LessonRecord
  * @property {string} id
- * @property {string} date - YYYY-MM-DD или ISO (наследие)
- * @property {Record<string, number>} scores - id критерия → балл 2–5 (или 0–100 в старых данных)
- */
-
-/**
- * @typedef {Object} Student
- * @property {string} id
- * @property {string} name
- * @property {string} [notes]
- * @property {LessonRecord[]} lessons
+ * @property {string} date
+ * @property {Record<string, number>} scores — id критерия → балл 2–5 (или 1–10)
  */
 
 /**
  * @typedef {Object} RuleProfile
- * @property {number[]} criteriaImportance — по одному на критерий, шкала 2–5
- * @property {number[][]} methodScores — [методика][критерий], шкала 2–5
+ * @property {number[]} criteriaImportance — справочная важность 2–5
+ * @property {number[][]} methodScores — [методика][критерий], 2–5 → матрицы МАИ
+ * @property {number[][][]} [localMatrices] — K матриц M×M парных сравнений методик
  */
 
-/**
- * @typedef {Object} AnalysisSnapshot
- * @property {Criterion[]} criteria
- * @property {TeachingMethod[]} methods
- * @property {RuleProfile} rules
- * @property {Student} student — выбранный для расчёта
- */
-
-/** Связи между сущностями (для схемы и отчёта). */
 export const ENTITY_RELATIONS = [
-  "Пользователь (учётная запись) хранит набор Критериев, Методик и Профиль правил (веса).",
+  "Пользователь хранит Критерии, Методики и Профиль правил (таблица подходящести → матрицы МАИ).",
   "Пользователь ведёт список Учеников (1 : N).",
-  "Ученик имеет много Записей уроков (1 : N); каждая запись привязана к дате занятия.",
-  "Запись урока содержит набор Оценок по критериям (N : M через пары «критерий — балл»).",
-  "Профиль правил задаёт важность каждого Критерия и матрицу «Методика × Критерий» (насколько методика подходит под критерий).",
-  "Анализ: Записи уроков выбранного Ученика + Профиль правил → Рекомендация (приоритет методик).",
+  "Ученик имеет Записи уроков с оценками по критериям (шкала 2–5, конвертируется в 1–10).",
+  "МАИ: оценки → дефицит (10 − оценка + 1) → матрица критериев → веса критериев.",
+  "МАИ: для каждого критерия — матрица сравнения методик → локальные приоритеты.",
+  "МАИ: глобальный приоритет = Σ (вес критерия × локальный приоритет методики).",
+  "Рекомендация — методика с максимальным глобальным приоритетом; проверка CR < 0.1.",
 ];
 
-/**
- * Собирает снимок данных для анализа (логический контекст без лишних полей состояния приложения).
- * @param {object} params
- * @param {{ id: string, name: string }[]} params.criteria
- * @param {{ id: string, name: string }[]} params.methods
- * @param {number[]} params.criteriaImportance
- * @param {number[][]} params.methodScores
- * @param {Student} params.student
- * @returns {AnalysisSnapshot}
- */
 export function buildAnalysisSnapshot({ criteria, methods, criteriaImportance, methodScores, student }) {
   return {
     criteria: criteria.map((c) => ({ id: c.id, name: c.name })),

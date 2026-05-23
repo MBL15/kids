@@ -1,32 +1,31 @@
-/** Шкала оценок для правил: 2–5 (важность критерия и «насколько методика подходит»). */
-
+/** Шкала оценок уроков в правилах (подходящесть методики): 2–5. */
 export const SCORE_MIN = 2;
 export const SCORE_MAX = 5;
-/** Нейтральное значение по умолчанию */
 export const SCORE_DEFAULT = 3;
 
+/** Шкала оценок ученика для МАИ: 1–10. */
+export const STUDENT_SCORE_MIN = 1;
+export const STUDENT_SCORE_MAX = 10;
+
 export const DEFAULT_CRITERIA = [
-  { id: "geom", name: "Геометрия / пространственное мышление" },
-  { id: "interest", name: "Заинтересованность в предмете" },
-  { id: "hw", name: "Выполнение домашних заданий" },
+  { id: "theory", name: "Теория" },
+  { id: "graphs", name: "Графики" },
+  { id: "tasks", name: "Задачи" },
+  { id: "independence", name: "Самостоятельность" },
 ];
 
 export const DEFAULT_METHODS = [
-  { id: "m1", name: "Наглядно-демонстрационный метод" },
-  { id: "m2", name: "Проблемное обучение" },
-  { id: "m3", name: "Игровые и сюжетные задания" },
-  { id: "m4", name: "Пошаговый тренажёр и дозированная нагрузка" },
+  { id: "m1", name: "Классическая" },
+  { id: "m2", name: "Практикум" },
+  { id: "m3", name: "Проектная" },
+  { id: "m4", name: "Визуальная" },
 ];
 
-/** Важность каждого критерия, 2–5 */
 export function defaultCriteriaImportance(count) {
   return Array.from({ length: count }, () => SCORE_DEFAULT);
 }
 
-/**
- * Оценки: строка = методика, столбец = критерий.
- * Значение 2–5: насколько эта методика подходит под этот критерий.
- */
+/** methodScores[M][K] — подходящесть методики под критерий (2–5), конвертируется в матрицы МАИ. */
 export function defaultMethodScores(numMethods, numCriteria) {
   return Array.from({ length: numMethods }, () =>
     Array.from({ length: numCriteria }, () => SCORE_DEFAULT)

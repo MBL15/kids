@@ -1,64 +1,115 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { getDb } from "./db.js";
 import { createDefaultUserState } from "./defaultUserState.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, "..", "data");
-const STORE_PATH = path.join(DATA_DIR, "store.json");
-
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function readStore() {
-  ensureDir();
-  if (!fs.existsSync(STORE_PATH)) {
-    const empty = { users: {} };
-    fs.writeFileSync(STORE_PATH, JSON.stringify(empty, null, 2), "utf8");
-    return empty;
-  }
+function parseJson(value, fallback) {
   try {
-    const raw = fs.readFileSync(STORE_PATH, "utf8");
-    return JSON.parse(raw);
+    return JSON.parse(value);
   } catch {
-    return { users: {} };
+    return fallback;
   }
 }
 
-function writeStore(store) {
-  ensureDir();
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), "utf8");
+function rowToPayload(row) {
+  const payload = {
+    criteria: parseJson(row.criteria, []),
+    methods: parseJson(row.methods, []),
+    criteriaImportance: parseJson(row.criteria_importance, []),
+    methodScores: parseJson(row.method_scores, []),
+    students: parseJson(row.students, []),
+  };
+  if (row.local_matrices) {
+    payload.localMatrices = parseJson(row.local_matrices, null);
+  }
+  return payload;
 }
 
 export function getUserPayload(login) {
-  const store = readStore();
-  const u = store.users[login];
-  if (!u) return null;
-  const { passwordHash, ...rest } = u;
-  return rest;
+  const db = getDb();
+  const row = db
+    .prepare(
+      `
+      SELECT p.*
+      FROM user_profiles p
+      INNER JOIN users u ON u.login = p.login
+      WHERE p.login = ?
+    `
+    )
+    .get(login);
+  if (!row) return null;
+  return rowToPayload(row);
 }
 
 export function createUser(login, passwordHash) {
-  const store = readStore();
-  if (store.users[login]) return false;
+  const db = getDb();
+  const exists = db.prepare("SELECT 1 FROM users WHERE login = ?").get(login);
+  if (exists) return false;
+
   const defaults = createDefaultUserState();
-  store.users[login] = { passwordHash, ...defaults };
-  writeStore(store);
+  const create = db.transaction(() => {
+    db.prepare("INSERT INTO users (login, password_hash) VALUES (?, ?)").run(
+      login,
+      passwordHash
+    );
+    db.prepare(
+      `
+      INSERT INTO user_profiles (
+        login, criteria, methods, criteria_importance, method_scores, students
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `
+    ).run(
+      login,
+      JSON.stringify(defaults.criteria),
+      JSON.stringify(defaults.methods),
+      JSON.stringify(defaults.criteriaImportance),
+      JSON.stringify(defaults.methodScores),
+      JSON.stringify(defaults.students)
+    );
+  });
+
+  create();
   return true;
 }
 
 export function saveUserPayload(login, payload) {
-  const store = readStore();
-  const u = store.users[login];
-  if (!u) return false;
-  const { passwordHash } = u;
-  store.users[login] = { passwordHash, ...payload };
-  writeStore(store);
-  return true;
+  const db = getDb();
+  const user = db.prepare("SELECT login FROM users WHERE login = ?").get(login);
+  if (!user) return false;
+
+  const localMatrices =
+    payload.localMatrices !== undefined
+      ? JSON.stringify(payload.localMatrices)
+      : null;
+
+  const result = db
+    .prepare(
+      `
+      UPDATE user_profiles
+      SET
+        criteria = ?,
+        methods = ?,
+        criteria_importance = ?,
+        method_scores = ?,
+        local_matrices = ?,
+        students = ?,
+        updated_at = datetime('now')
+      WHERE login = ?
+    `
+    )
+    .run(
+      JSON.stringify(payload.criteria),
+      JSON.stringify(payload.methods),
+      JSON.stringify(payload.criteriaImportance),
+      JSON.stringify(payload.methodScores),
+      localMatrices,
+      JSON.stringify(payload.students),
+      login
+    );
+
+  return result.changes > 0;
 }
 
 export function getPasswordHash(login) {
-  const store = readStore();
-  return store.users[login]?.passwordHash ?? null;
+  const db = getDb();
+  const row = db.prepare("SELECT password_hash FROM users WHERE login = ?").get(login);
+  return row?.password_hash ?? null;
 }
