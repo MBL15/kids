@@ -287,6 +287,30 @@
                   </div>
                 </div>
 
+                <div class="student-pairwise-section">
+                  <h3 class="section-title">Этап 2. Матрицы сравнения методик</h3>
+                  <p class="diagram-ref pairwise-section-lead">
+                    Один раз для ученика. В каждой матрице заполните ячейки <strong>выше диагонали</strong> — насколько методика в строке важнее методики в столбце.
+                    <a href="#" class="pairwise-scale-link" id="btn-open-saaty-scale">Шкала Saaty</a>
+                  </p>
+                  <details class="pairwise-scale-help" id="pairwise-scale-help">
+                    <summary>Шкала сравнений (Saaty)</summary>
+                    <table class="help-doc-table pairwise-scale-table">
+                      <thead><tr><th>Значение</th><th>Смысл</th></tr></thead>
+                      <tbody>
+                        <tr><td>1</td><td>Равная важность</td></tr>
+                        <tr><td>3</td><td>Умеренное превосходство</td></tr>
+                        <tr><td>5</td><td>Сильное превосходство</td></tr>
+                        <tr><td>7</td><td>Очень сильное превосходство</td></tr>
+                        <tr><td>9</td><td>Абсолютное превосходство</td></tr>
+                        <tr><td>2, 4, 6, 8</td><td>Промежуточные значения</td></tr>
+                        <tr><td>1/2, 1/3…</td><td>Вторая методика важнее</td></tr>
+                      </tbody>
+                    </table>
+                  </details>
+                  <div id="student-pairwise-matrices" class="pairwise-matrices"></div>
+                </div>
+
                 <div class="lesson-form-card">
                   <div class="lesson-form-header">
                     <div>
@@ -378,7 +402,7 @@
                 <div class="analysis-hero">
                   <div class="analysis-hero-text">
                     <h2>Анализ и рекомендация</h2>
-                    <p class="panel-desc">Подбор методики по методу анализа иерархий (МАИ): оценки 1–10 → дефицит → веса → рекомендация</p>
+                    <p class="panel-desc">Подбор методики по МАИ: оценки → дефицит → веса критериев → глобальные приоритеты → рекомендация</p>
                   </div>
                   <div class="analysis-hero-badge" aria-hidden="true">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -406,7 +430,7 @@
                 <div id="analysis-empty" class="analysis-empty">
                   <div class="analysis-empty-icon" aria-hidden="true">📊</div>
                   <p class="analysis-empty-title">Результат появится здесь</p>
-                  <p class="analysis-empty-desc">После анализа вы увидите рекомендуемую методику, рейтинг и диаграмму</p>
+                  <p class="analysis-empty-desc">После анализа: рекомендация, веса критериев, CR, локальные и глобальные приоритеты</p>
                 </div>
 
                 <div id="analysis-result" class="analysis-result hidden"></div>
@@ -434,7 +458,7 @@
                 <div class="panel-header">
                   <h2>Правила</h2>
                   <p class="panel-desc">
-                    Критерии, методики и таблица подходящести (2–5). Из неё строятся матрицы парных сравнений МАИ для каждого критерия.
+                    Список критериев оценки и методик обучения.
                   </p>
                 </div>
 
@@ -445,15 +469,6 @@
                 <h3 class="section-title">Методики</h3>
                 <div id="methods-list" class="settings-list"></div>
                 <button type="button" class="btn btn-secondary" id="btn-add-method">+ Методика</button>
-
-                <h3 class="section-title">Подходящесть методики под критерий</h3>
-                <p class="diagram-ref">Строка — методика, столбец — критерий. Значения 2–5 преобразуются в матрицу парных сравнений (шкала Saaty).</p>
-                <div class="table-wrap settings-score-wrap">
-                  <table class="settings-score-table" id="method-scores-table">
-                    <thead id="method-scores-thead"></thead>
-                    <tbody id="method-scores-tbody"></tbody>
-                  </table>
-                </div>
 
                 <div class="form-row" style="margin-top: 1.25rem">
                   <button class="btn btn-secondary" id="btn-export-json">Экспорт JSON</button>

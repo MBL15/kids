@@ -12,6 +12,138 @@ export const SAATY_MIN = 1 / 9;
 export const SAATY_MAX = 9;
 export const CR_THRESHOLD = 0.1;
 
+/** Допустимые значения шкалы Saaty (1/9 … 9). */
+export const SAATY_VALUES = [
+  9, 8, 7, 6, 5, 4, 3, 2, 1,
+  1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 6, 1 / 7, 1 / 8, 1 / 9,
+];
+
+export function formatSaatyValue(value) {
+  const v = clampSaaty(Number(value));
+  if (v >= 1) return String(Math.round(v));
+  for (let n = 2; n <= 9; n++) {
+    if (Math.abs(v - 1 / n) < 0.001) return `1/${n}`;
+  }
+  return String(v);
+}
+
+export function parseSaatyValue(raw) {
+  const s = String(raw ?? "").trim();
+  if (s.includes("/")) {
+    const [a, b] = s.split("/").map(Number);
+    if (b) return clampSaaty(a / b);
+  }
+  return clampSaaty(Number(s) || 1);
+}
+
+export function saatyComparisonHint(value, leftName, rightName) {
+  const v = parseSaatyValue(value);
+  if (Math.abs(v - 1) < 0.01) return "Равная важность";
+
+  const favorLeft = v >= 1;
+  const n = favorLeft ? v : 1 / v;
+  const a = favorLeft ? leftName : rightName;
+  const b = favorLeft ? rightName : leftName;
+
+  if (!favorLeft) {
+    const invRounded = [2, 3, 4, 5, 6, 7, 8, 9].find((k) => Math.abs(n - k) < 0.12);
+    if (invRounded) {
+      const timesWord = invRounded >= 5 ? "раз" : "раза";
+      return `${a} важнее ${b} в ${invRounded} ${timesWord}`;
+    }
+  }
+
+  const rounded = [2, 3, 4, 5, 6, 7, 8, 9].find((k) => Math.abs(n - k) < 0.12);
+  if (rounded === 9) return `${a} абсолютно важнее ${b}`;
+  if (rounded === 7) return `${a} очень сильно важнее ${b}`;
+  if (rounded === 5) return `${a} сильно важнее ${b}`;
+  if (rounded === 4) return `${a} важнее ${b} (между сильно и очень)`;
+  if (rounded === 3) return `${a} умеренно важнее ${b}`;
+  if (rounded === 2) return `${a} чуть важнее ${b}`;
+
+  if (n >= 7) return `${a} намного важнее ${b}`;
+  if (n >= 5) return `${a} сильно важнее ${b}`;
+  if (n >= 3) return `${a} умеренно важнее ${b}`;
+  return `${a} немного важнее ${b}`;
+}
+
+/** Матрица M×M с единицами (равная важность всех методик). */
+export function createOnesMatrix(n) {
+  return Array.from({ length: n }, () => Array(n).fill(1));
+}
+
+/** K локальных матриц M×M — по одной на каждый критерий. */
+export function defaultLocalMatrices(numCriteria, numMethods) {
+  return Array.from({ length: numCriteria }, () => createOnesMatrix(numMethods));
+}
+
+export function methodPairIndices(numMethods) {
+  const pairs = [];
+  for (let i = 0; i < numMethods; i++) {
+    for (let j = i + 1; j < numMethods; j++) pairs.push([i, j]);
+  }
+  return pairs;
+}
+
+export function getPairwiseValue(matrix, i, j) {
+  const a = Math.min(i, j);
+  const b = Math.max(i, j);
+  return matrix[a][b];
+}
+
+export function setPairwiseValue(matrix, i, j, value) {
+  const v = parseSaatyValue(value);
+  const a = Math.min(i, j);
+  const b = Math.max(i, j);
+  matrix[a][b] = v;
+  matrix[b][a] = 1 / v;
+}
+
+export function resizeLocalMatrices(matrices, oldSize, newSize) {
+  if (oldSize === newSize) return matrices;
+  return matrices.map((mat) => {
+    const next = createOnesMatrix(newSize);
+    for (let i = 0; i < Math.min(oldSize, newSize); i++) {
+      for (let j = 0; j < Math.min(oldSize, newSize); j++) {
+        next[i][j] = mat[i]?.[j] ?? 1;
+      }
+    }
+    return next;
+  });
+}
+
+export function removeMethodFromMatrices(matrices, removeIndex) {
+  const oldSize = matrices[0]?.length ?? 0;
+  return matrices.map((mat) => {
+    const next = createOnesMatrix(oldSize - 1);
+    let ni = 0;
+    for (let i = 0; i < oldSize; i++) {
+      if (i === removeIndex) continue;
+      let nj = 0;
+      for (let j = 0; j < oldSize; j++) {
+        if (j === removeIndex) continue;
+        next[ni][nj] = mat[i][j];
+        nj++;
+      }
+      ni++;
+    }
+    return next;
+  });
+}
+
+export function isValidLocalMatrices(localMatrices, k, m) {
+  return (
+    Array.isArray(localMatrices) &&
+    localMatrices.length === k &&
+    localMatrices.every(
+      (mat) =>
+        Array.isArray(mat) &&
+        mat.length === m &&
+        mat.every((row) => Array.isArray(row) && row.length === m)
+    )
+  );
+}
+
 export function normalizeVector(v) {
   const sum = v.reduce((a, b) => a + b, 0);
   if (sum === 0) return v.map(() => 1 / v.length);

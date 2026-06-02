@@ -1,9 +1,8 @@
 import {
   DEFAULT_CRITERIA,
   DEFAULT_METHODS,
-  defaultCriteriaImportance,
-  defaultMethodScores,
 } from "../js/data.js";
+import { defaultLocalMatrices } from "../js/ahp.js";
 
 export function createDefaultUserState() {
   const criteria = JSON.parse(JSON.stringify(DEFAULT_CRITERIA));
@@ -13,8 +12,9 @@ export function createDefaultUserState() {
   return {
     criteria,
     methods,
-    criteriaImportance: defaultCriteriaImportance(k),
-    methodScores: defaultMethodScores(m, k),
+    criteriaImportance: [],
+    methodScores: [],
+    localMatrices: defaultLocalMatrices(k, m),
     students: [],
   };
 }

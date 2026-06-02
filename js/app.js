@@ -1,4 +1,18 @@
-import { methodScoresToLocalMatrices } from "./ahp.js";
+import {
+  methodScoresToLocalMatrices,
+  defaultLocalMatrices,
+  createOnesMatrix,
+  isValidLocalMatrices,
+  methodPairIndices,
+  getPairwiseValue,
+  setPairwiseValue,
+  resizeLocalMatrices,
+  removeMethodFromMatrices,
+  SAATY_VALUES,
+  formatSaatyValue,
+  parseSaatyValue,
+  saatyComparisonHint,
+} from "./ahp.js";
 import { ENTITY_RELATIONS } from "./analysis/dataLogicalModel.js";
 import { runFunctionalScoreAnalysis, FUNCTIONAL_PIPELINE_OVERVIEW } from "./analysis/functionalAnalysisModel.js";
 import { SCORE_MIN, SCORE_MAX, SCORE_DEFAULT } from "./data.js";
@@ -73,39 +87,115 @@ const MONTHS_RU_GEN = [
 
 const HELP_CONTENT = {
   docs: {
-    title: "Документация",
+    title: "Метод анализа иерархий (МАИ)",
     html: `
-      <h3>Назначение</h3>
-      <p>Приложение использует метод анализа иерархий (МАИ): оценки ученика 1–10, дефицит, матрицы сравнений, CR и глобальные приоритеты методик.</p>
-      <h3>Быстрый старт</h3>
-      <ol>
-        <li>Добавьте ученика на главной странице.</li>
-        <li>Откройте карточку и внесите оценки по урокам (шкала 2–5).</li>
-        <li>Настройте критерии и методики в разделе «Правила».</li>
-        <li>Запустите анализ в разделе «Анализ».</li>
-      </ol>
-      <h3>Разделы</h3>
-      <ul>
-        <li><strong>Главная</strong> — расписание уроков и сводная статистика.</li>
-        <li><strong>Ученики</strong> — список учеников и добавление новых.</li>
-        <li><strong>Анализ</strong> — рекомендация методики по данным уроков.</li>
-        <li><strong>Правила</strong> — критерии, методики и таблица подходящести.</li>
-      </ul>
+      <h3>Что такое МАИ</h3>
+      <p>Математический способ выбрать лучшую методику обучения для ученика на основе его сильных и слабых сторон.</p>
+
+      <h3>Этап 1. Оценка ученика</h3>
+      <p>Репетитор выставляет оценки по критериям (на уроках 2–5, в анализе переводятся в 1–10).</p>
+      <table class="help-doc-table">
+        <thead><tr><th>Критерий</th><th>Что оценивается</th><th>Низкая (1–2)</th><th>Высокая (9–10)</th></tr></thead>
+        <tbody>
+          <tr><td>Теория</td><td>Знание правил, формул</td><td>Не помнит формулы</td><td>Свободно оперирует теорией</td></tr>
+          <tr><td>Графики</td><td>Построение графиков</td><td>Не может построить простой график</td><td>Строит сложные без ошибок</td></tr>
+          <tr><td>Задачи</td><td>Решение задач</td><td>Не решает типовую</td><td>Решает повышенной сложности</td></tr>
+          <tr><td>Самостоятельность</td><td>Работа без подсказок</td><td>Нужен постоянный контроль</td><td>Работает полностью сам</td></tr>
+        </tbody>
+      </table>
+      <p class="help-note"><strong>Важно:</strong> чем ниже оценка, тем больше дефицит — система в первую очередь подтягивает слабые стороны.</p>
+
+      <h3>Этап 2. Репетитор настраивает матрицы методик (один раз для каждого ученика)</h3>
+      <p>Для каждого критерия вы заполняете таблицу сравнения методик. Отвечаете на вопрос:</p>
+      <blockquote>«Насколько одна методика важнее другой для развития этого конкретного критерия?»</blockquote>
+      <p><strong>Пример для критерия «Теория»:</strong></p>
+      <table class="help-doc-table">
+        <thead><tr><th>Сравнение</th><th>Значение</th><th>Смысл</th></tr></thead>
+        <tbody>
+          <tr><td>Классическая важнее Практикума</td><td>3</td><td>Умеренно важнее</td></tr>
+          <tr><td>Классическая важнее Проектной</td><td>5</td><td>Сильно важнее</td></tr>
+          <tr><td>Классическая важнее Визуальной</td><td>4</td><td>Между сильно и очень</td></tr>
+          <tr><td>Практикум важнее Проектной</td><td>2</td><td>Чуть важнее</td></tr>
+          <tr><td>Практикум важнее Визуальной</td><td>2</td><td>Чуть важнее</td></tr>
+          <tr><td>Проектная важнее Визуальной</td><td>1/2</td><td>Визуальная важнее в 2 раза</td></tr>
+        </tbody>
+      </table>
+      <p><strong>Шкала сравнений:</strong></p>
+      <table class="help-doc-table">
+        <thead><tr><th>Значение</th><th>Смысл</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Равная важность</td></tr>
+          <tr><td>3</td><td>Умеренное превосходство</td></tr>
+          <tr><td>5</td><td>Сильное превосходство</td></tr>
+          <tr><td>7</td><td>Очень сильное превосходство</td></tr>
+          <tr><td>9</td><td>Абсолютное превосходство</td></tr>
+          <tr><td>2, 4, 6, 8</td><td>Промежуточные значения</td></tr>
+          <tr><td>1/2, 1/3…</td><td>Обратное превосходство (вторая методика важнее)</td></tr>
+        </tbody>
+      </table>
+      <p class="help-note"><strong>Аналогия:</strong> если вы выбираете автомобиль и для вас важна «надёжность», вы сравните марки между собой. Здесь то же самое — для каждого критерия вы сравниваете методики обучения. Заполняется в карточке ученика.</p>
+
+      <h3>Этап 3. Система рассчитывает результат</h3>
+      <p>Автоматически выполняются следующие шаги. <strong>Дополнительных действий от репетитора не требуется</strong> — веса критериев система выводит из ваших оценок через дефицит.</p>
+
+      <h4>Шаг 3.1. Расчёт дефицита знаний</h4>
+      <p>Система преобразует оценки в «дефицит» по формуле: <strong>Дефицит = 10 − оценка + 1</strong></p>
+      <p class="help-note">Пример: оценка 3 → дефицит 8 (очень нужно улучшать); оценка 9 → дефицит 2 (почти не нужно улучшать).</p>
+
+      <h4>Шаг 3.2. Построение матрицы критериев</h4>
+      <p>Для каждой пары критериев: <strong>значение = дефицит А / дефицит Б</strong>. Если дефицит теории = 8, а графиков = 2, то «теория важнее графиков в 4 раза».</p>
+
+      <h4>Шаг 3.3. Расчёт весов критериев</h4>
+      <p>Из матрицы попарных сравнений вычисляются веса — насколько каждый критерий важен для улучшения. Сумма весов = 100%. Чем выше дефицит, тем больше вес.</p>
+
+      <h4>Шаг 3.4. Проверка согласованности (CR)</h4>
+      <p>Система проверяет, нет ли противоречий в сравнениях. Норма: <strong>CR &lt; 0,1</strong>. Если CR ≥ 0,1 — рекомендация может быть ненадёжной.</p>
+
+      <h4>Шаг 3.5. Локальные приоритеты методик</h4>
+      <p>Для каждого критерия система берёт <strong>заполненную вами</strong> матрицу сравнения методик и вычисляет, какая методика лучше для этого критерия.</p>
+
+      <h4>Шаг 3.6. Глобальные приоритеты</h4>
+      <p><strong>Глобальный приоритет = Σ (вес критерия × локальный приоритет методики)</strong></p>
+
+      <h4>Шаг 3.7. Выбор лучшей методики</h4>
+      <p>Методика с максимальным глобальным приоритетом становится рекомендацией.</p>
+
+      <h4>Что вы видите на экране после расчёта</h4>
+      <table class="help-doc-table">
+        <thead><tr><th>Блок</th><th>Что показывает</th></tr></thead>
+        <tbody>
+          <tr><td>Веса критериев</td><td>Насколько важно улучшать каждый критерий (%)</td></tr>
+          <tr><td>CR (согласованность)</td><td>✅ если всё хорошо, ⚠️ если есть противоречия</td></tr>
+          <tr><td>Локальные приоритеты</td><td>Ранжирование методик по каждому критерию</td></tr>
+          <tr><td>Глобальные приоритеты</td><td>Итоговый рейтинг методик</td></tr>
+          <tr><td>Рекомендация</td><td>Какая методика подходит лучше всего</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Что делать репетитору</h3>
+      <table class="help-doc-table">
+        <thead><tr><th>Действие</th><th>Когда</th><th>Время</th></tr></thead>
+        <tbody>
+          <tr><td>Выставить оценки</td><td>При знакомстве и при изменении успеваемости</td><td>1 мин</td></tr>
+          <tr><td>Заполнить матрицы сравнения методик</td><td>Один раз для каждого ученика</td><td>5–10 мин</td></tr>
+          <tr><td>Посмотреть рекомендацию</td><td>После обновления оценок</td><td>5 сек</td></tr>
+        </tbody>
+      </table>
     `,
   },
   faq: {
     title: "Частые вопросы",
     html: `
+      <h3>Откуда берутся веса критериев?</h3>
+      <p>Из попарных сравнений, которые система строит <strong>автоматически из дефицитов</strong> (10 − оценка + 1). Дополнительных действий не требуется.</p>
+      <h3>Где заполнять матрицы методик (этап 2)?</h3>
+      <p>В карточке ученика — «Этап 2. Матрицы сравнения методик». Для каждого критерия сравниваете методики по шкале Saaty. Один раз на ученика.</p>
       <h3>Где хранятся данные?</h3>
-      <p>На сервере в базе SQLite (<code>data/app.db</code>). Каждый пользователь видит только свои данные.</p>
+      <p>На сервере в SQLite (<code>data/app.db</code>).</p>
       <h3>Какая шкала оценок?</h3>
-      <p>На уроках — 2–5; при анализе переводится в 1–10. Дефицит = 10 − оценка + 1. Таблица в «Правила» задаёт матрицы сравнения методик.</p>
+      <p>На уроках — 2–5; при анализе — 1–10. Дефицит = 10 − оценка + 1.</p>
       <h3>Когда появится рекомендация?</h3>
-      <p>После добавления хотя бы одного урока с оценками — в разделе «Анализ» выберите ученика и нажмите «Выполнить анализ».</p>
-      <h3>Можно ли перенести настройки?</h3>
-      <p>Да. В «Правила» используйте экспорт и импорт JSON.</p>
-      <h3>Что означают кольца на главной?</h3>
-      <p>Левое — прогресс по числу уроков, правое — доля учеников, у которых уже есть оценки.</p>
+      <p>После урока с оценками и заполненных матриц — раздел «Анализ».</p>
     `,
   },
 };
@@ -130,7 +220,7 @@ async function api(method, path, body) {
 }
 
 /**
- * Нормализация правил и построение локальных матриц МАИ из таблицы подходящести.
+ * Нормализация правил и локальных матриц МАИ.
  */
 function migrateAndNormalize(s) {
   const k = s.criteria.length;
@@ -143,41 +233,70 @@ function migrateAndNormalize(s) {
     return;
   }
 
-  if (!Array.isArray(s.criteriaImportance)) s.criteriaImportance = [];
-  while (s.criteriaImportance.length < k) s.criteriaImportance.push(SCORE_DEFAULT);
-  s.criteriaImportance.length = k;
-  for (let i = 0; i < k; i++) {
-    s.criteriaImportance[i] = normalizeStoredScore(s.criteriaImportance[i]);
+  if (!isValidLocalMatrices(s.localMatrices, k, m)) {
+    const legacyScores =
+      Array.isArray(s.methodScores) &&
+      s.methodScores.length === m &&
+      s.methodScores.every((row) => Array.isArray(row) && row.length === k);
+    s.localMatrices = legacyScores
+      ? methodScoresToLocalMatrices(s.methodScores)
+      : defaultLocalMatrices(k, m);
   }
 
-  if (!Array.isArray(s.methodScores)) s.methodScores = [];
-  while (s.methodScores.length < m) {
-    s.methodScores.push(Array(k).fill(SCORE_DEFAULT));
-  }
-  s.methodScores.length = m;
-  for (let i = 0; i < m; i++) {
-    if (!Array.isArray(s.methodScores[i])) s.methodScores[i] = Array(k).fill(SCORE_DEFAULT);
-    while (s.methodScores[i].length < k) s.methodScores[i].push(SCORE_DEFAULT);
-    s.methodScores[i].length = k;
-    for (let j = 0; j < k; j++) {
-      s.methodScores[i][j] = normalizeStoredScore(s.methodScores[i][j]);
+  s.criteriaImportance = [];
+  s.methodScores = [];
+  delete s.criteriaMatrix;
+
+  if (!isValidLocalMatrices(s.localMatrices, k, m)) {
+    const fromStudent = (s.students || []).find((st) =>
+      isValidLocalMatrices(st.localMatrices, k, m)
+    );
+    if (fromStudent) {
+      s.localMatrices = JSON.parse(JSON.stringify(fromStudent.localMatrices));
     }
   }
 
-  const built = methodScoresToLocalMatrices(s.methodScores);
-  const hasValidStored =
-    Array.isArray(s.localMatrices) &&
-    s.localMatrices.length === k &&
-    s.localMatrices.every((mat) => Array.isArray(mat) && mat.length === m && mat.every((row) => row.length === m));
-  if (!hasValidStored) {
-    s.localMatrices = built;
-  }
-  delete s.criteriaMatrix;
+  migrateStudentsLocalMatrices(s);
 }
 
-function getLocalMatrices() {
+function migrateStudentsLocalMatrices(s) {
+  const k = s.criteria.length;
+  const m = s.methods.length;
+  if (k === 0 || m === 0) return;
+
+  const globalMatrices = isValidLocalMatrices(s.localMatrices, k, m) ? s.localMatrices : null;
+
+  for (const student of s.students || []) {
+    if (!isValidLocalMatrices(student.localMatrices, k, m)) {
+      student.localMatrices = globalMatrices
+        ? JSON.parse(JSON.stringify(globalMatrices))
+        : defaultLocalMatrices(k, m);
+    }
+  }
+}
+
+function ensureStudentLocalMatrices(student) {
   migrateAndNormalize(state);
-  return state.localMatrices;
+  const k = state.criteria.length;
+  const m = state.methods.length;
+  if (!isValidLocalMatrices(student.localMatrices, k, m)) {
+    student.localMatrices = defaultLocalMatrices(k, m);
+  }
+  return student.localMatrices;
+}
+
+function syncAllStudentsMatrices(mutator) {
+  for (const student of state.students || []) {
+    ensureStudentLocalMatrices(student);
+    mutator(student);
+  }
+}
+
+function migrateStudentsCleanup(s) {
+  migrateStudentsLocalMatrices(s);
+  for (const student of s.students || []) {
+    delete student.criterionSignificance;
+  }
 }
 
 async function bootstrapSession() {
@@ -197,22 +316,26 @@ async function bootstrapSession() {
   state.criteriaImportance = data.criteriaImportance;
   state.methodScores = data.methodScores;
 
-  const hadOldMatrices = Boolean(data.criteriaMatrix);
+  const k = state.criteria.length;
+  const m = state.methods.length;
+  const hadValidMatrices = isValidLocalMatrices(state.localMatrices, k, m);
+  const needsStudentMigrate = (state.students || []).some(
+    (st) => !isValidLocalMatrices(st.localMatrices, k, m)
+  );
   migrateAndNormalize(state);
-  if (hadOldMatrices) await persist();
+  if (!hadValidMatrices || needsStudentMigrate || data.criteriaMatrix) await persist();
   return true;
 }
 
 async function persist() {
   if (!getToken()) return;
   migrateAndNormalize(state);
-  state.localMatrices = methodScoresToLocalMatrices(state.methodScores);
   const res = await api("PUT", "/api/me", {
     criteria: state.criteria,
     methods: state.methods,
-    criteriaImportance: state.criteriaImportance,
-    methodScores: state.methodScores,
-    localMatrices: state.localMatrices,
+    criteriaImportance: [],
+    methodScores: [],
+    localMatrices: [],
     students: state.students,
   });
   if (!res.ok) {
@@ -1011,7 +1134,13 @@ document.getElementById("btn-add-student").addEventListener("click", async () =>
   const name = document.getElementById("new-student-name").value.trim();
   if (!name) return;
   const notes = document.getElementById("new-student-notes").value.trim();
-  state.students.push({ id: uid(), name, notes, lessons: [] });
+  state.students.push({
+    id: uid(),
+    name,
+    notes,
+    lessons: [],
+    localMatrices: defaultLocalMatrices(state.criteria.length, state.methods.length),
+  });
   document.getElementById("new-student-name").value = "";
   document.getElementById("new-student-notes").value = "";
   await persist();
@@ -1134,6 +1263,7 @@ function openStudent(id, options = {}) {
   setLessonFormMsg("", "");
   showApp("student-detail");
   renderStudentLessons(s);
+  renderStudentPairwiseMatrices(s);
 }
 
 document.getElementById("btn-back-students").addEventListener("click", () => {
@@ -1225,6 +1355,15 @@ function renderStudentLessons(s) {
 
 document.getElementById("lesson-date")?.addEventListener("change", updateLessonDateDisplay);
 
+document.getElementById("btn-open-saaty-scale")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  const details = document.getElementById("pairwise-scale-help");
+  if (details) {
+    details.open = true;
+    details.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+});
+
 document.getElementById("btn-fill-default-scores")?.addEventListener("click", () => {
   setAllLessonScores(SCORE_DEFAULT);
 });
@@ -1300,13 +1439,6 @@ function setAnalysisEmptyVisible(visible) {
   }
 }
 
-function confidenceLabel(margin) {
-  const pct = margin * 100;
-  if (pct >= 15) return "Высокая";
-  if (pct >= 8) return "Средняя";
-  return "Низкая";
-}
-
 function renderAnalysisForm() {
   fillAnalysisModelListsOnce();
   destroyAnalysisRadarChart();
@@ -1323,6 +1455,32 @@ function renderAnalysisForm() {
   setAnalysisEmptyVisible(true);
 }
 
+function tutorGradeComment(score10, deficit) {
+  if (score10 >= 9) return "отлично, дефицита почти нет";
+  if (score10 >= 7) return "хорошо";
+  if (score10 >= 5) return "средне";
+  if (score10 <= 3) return "плохо, большой дефицит";
+  return "средне, нуждается в улучшении";
+}
+
+function buildRecommendationReason(bestIdx, deficits, localPriorities) {
+  let topCi = 0;
+  for (let i = 1; i < deficits.length; i++) {
+    if (deficits[i] > deficits[topCi]) topCi = i;
+  }
+  const critName = state.criteria[topCi]?.name ?? "критерию";
+  const methodName = state.methods[bestIdx]?.name ?? "методика";
+  const localRow = localPriorities[topCi] ?? [];
+  let bestLocalMi = 0;
+  for (let mi = 1; mi < localRow.length; mi++) {
+    if (localRow[mi] > localRow[bestLocalMi]) bestLocalMi = mi;
+  }
+  if (bestLocalMi === bestIdx) {
+    return `Потому что у ученика самый большой дефицит по «${critName}», а «${methodName}» сильнее всего развивает этот критерий (задано в матрице сравнения).`;
+  }
+  return `С учётом дефицита по «${critName}» и глобальных приоритетов методик.`;
+}
+
 function crBadgeHtml(cr, consistent) {
   const cls = consistent ? "cr-ok" : "cr-bad";
   const icon = consistent ? "✅" : "⚠️";
@@ -1334,7 +1492,7 @@ function renderAnalysisResult(student) {
   migrateAndNormalize(state);
   const critIds = state.criteria.map((c) => c.id);
   const lessons = student.lessons || [];
-  const localMatrices = getLocalMatrices();
+  const localMatrices = ensureStudentLocalMatrices(student);
 
   const {
     scores10,
@@ -1347,8 +1505,6 @@ function renderAnalysisResult(student) {
     localConsistent,
     global,
     bestIdx,
-    steps,
-    marginFirstSecond,
   } = runFunctionalScoreAnalysis({
     criterionIds: critIds,
     lessons,
@@ -1356,38 +1512,38 @@ function renderAnalysisResult(student) {
   });
 
   const bestMethod = state.methods[bestIdx];
-  const confidence = confidenceLabel(marginFirstSecond);
-  const maxPriority = Math.max(...global, 0.001);
-
-  const ranked = state.methods
+  const rankedMethods = state.methods
     .map((m, i) => ({ name: m.name, priority: global[i], isBest: i === bestIdx }))
     .sort((a, b) => b.priority - a.priority);
 
-  const rankHtml = ranked
+  const gradeListHtml = state.criteria
     .map(
-      (m) => `
-    <li class="method-rank-item${m.isBest ? " is-best" : ""}">
-      <div class="method-rank-head">
-        <span class="method-rank-name">${escapeHtml(m.name)}${m.isBest ? " ★" : ""}</span>
-        <span class="method-rank-pct">${(m.priority * 100).toFixed(1)}%</span>
-      </div>
-      <div class="method-rank-track">
-        <div class="method-rank-fill" style="width:${((m.priority / maxPriority) * 100).toFixed(1)}%"></div>
-      </div>
-    </li>`
+      (c, i) =>
+        `<li><strong>${escapeHtml(c.name)}</strong> — ${scores10[i].toFixed(0)} (${tutorGradeComment(scores10[i], deficits[i])})</li>`
     )
     .join("");
 
-  const studentScoresHtml = state.criteria
+  const weightsRows = state.criteria
+    .map((c, i) => ({ name: c.name, weight: critW[i] }))
+    .sort((a, b) => b.weight - a.weight)
     .map(
-      (c, i) => `
-    <div class="analysis-metric">
-      ${escapeHtml(c.name)}
-      <strong>${scores10[i].toFixed(1)}</strong>
-      <span class="diagram-ref">дефицит ${deficits[i].toFixed(1)} · вес ${(critW[i] * 100).toFixed(1)}%</span>
-    </div>`
+      (row) =>
+        `<tr><td>${escapeHtml(row.name)}</td><td class="analysis-weight-val">${(row.weight * 100).toFixed(0)}%</td></tr>`
     )
     .join("");
+
+  const globalListHtml = rankedMethods
+    .map(
+      (m, idx) =>
+        `<li class="${m.isBest ? "analysis-global-best" : ""}"><strong>${escapeHtml(m.name)}</strong> — ${m.priority.toFixed(2)}${m.isBest ? ' <span class="analysis-rec-badge">✅ рекомендация</span>' : ""}</li>`
+    )
+    .join("");
+
+  const studentSubtitle = student.notes?.trim()
+    ? `${escapeHtml(student.name)}, ${escapeHtml(student.notes.trim())}`
+    : escapeHtml(student.name);
+
+  const reasonHtml = buildRecommendationReason(bestIdx, deficits, localPriorities);
 
   const localTableHead = `<tr><th>Методика</th>${state.criteria
     .map((c) => `<th>${escapeHtml(c.name)}</th>`)
@@ -1405,16 +1561,6 @@ function renderAnalysisResult(student) {
     .map((c, i) => `${escapeHtml(c.name)}: ${crBadgeHtml(localCR[i], localConsistent[i])}`)
     .join("<br />");
 
-  const pipelineHtml = steps
-    .map(
-      (s) => `
-    <li>
-      <div class="analysis-pipeline-step">${escapeHtml(s.id)} — ${escapeHtml(s.title)}</div>
-      <div class="analysis-pipeline-io">${escapeHtml(s.input)} → ${escapeHtml(s.output)}</div>
-    </li>`
-    )
-    .join("");
-
   let html = `
     <div class="analysis-recommendation">
       <div class="analysis-recommendation-label">Рекомендуемая методика (МАИ)</div>
@@ -1422,76 +1568,52 @@ function renderAnalysisResult(student) {
       <div class="analysis-recommendation-meta">
         <span class="analysis-meta-chip">Ученик: <strong>${escapeHtml(student.name)}</strong></span>
         <span class="analysis-meta-chip">Приоритет: <strong>${(global[bestIdx] * 100).toFixed(1)}%</strong></span>
-        <span class="analysis-meta-chip">Уверенность: <strong>${confidence}</strong></span>
       </div>
     </div>
 
-    <div class="analysis-stats-grid">
-      <div class="analysis-stat-card">
-        <span class="analysis-stat-label">Глобальный приоритет</span>
-        <span class="analysis-stat-value">${(global[bestIdx] * 100).toFixed(1)}%</span>
-        <span class="analysis-stat-caption">${escapeHtml(bestMethod.name)}</span>
-      </div>
-      <div class="analysis-stat-card">
-        <span class="analysis-stat-label">Разрыв с 2-м местом</span>
-        <span class="analysis-stat-value">${(marginFirstSecond * 100).toFixed(1)}</span>
-        <span class="analysis-stat-caption">процентных пунктов</span>
-      </div>
-      <div class="analysis-stat-card">
-        <span class="analysis-stat-label">Согласованность критериев</span>
-        <span class="analysis-stat-value">${criteriaCR.toFixed(3)}</span>
-        <span class="analysis-stat-caption">${criteriaConsistent ? "CR < 0.1 ✅" : "CR ≥ 0.1 ⚠️"}</span>
-      </div>
-    </div>
+    <div class="analysis-card analysis-practice-report">
+      <h3 class="analysis-card-title">Результат анализа</h3>
+      <p class="analysis-practice-student">Ученик: <strong>${studentSubtitle}</strong></p>
 
-    <div class="analysis-card">
-      <h3 class="analysis-card-title">Оценки ученика и веса критериев (1–10)</h3>
-      <p class="form-hint">Дефицит = 10 − оценка + 1. Веса критериев вычислены из матрицы дефицитов.</p>
-      <div class="analysis-metrics-grid">${studentScoresHtml}</div>
-      <p style="margin-top:0.75rem">${crBadgeHtml(criteriaCR, criteriaConsistent)}</p>
-    </div>
+      <h4 class="analysis-practice-heading">Оценки репетитора:</h4>
+      <ul class="analysis-grade-list">${gradeListHtml}</ul>
 
-    <div class="analysis-grid-2">
-      <div class="analysis-card">
-        <h3 class="analysis-card-title">Глобальный рейтинг методик</h3>
-        <ul class="method-rank-list">${rankHtml}</ul>
+      <h4 class="analysis-practice-heading">Что рассчитала система:</h4>
+      <div class="table-wrap">
+        <table class="analysis-weights-table">
+          <thead><tr><th>Критерий</th><th>Вес (важность улучшения)</th></tr></thead>
+          <tbody>${weightsRows}</tbody>
+        </table>
       </div>
-      <div class="analysis-card analysis-radar-card">
-        <h3 class="analysis-card-title">Доли глобальных приоритетов</h3>
-        <div class="analysis-radar-wrap radar-canvas-box">
-          <canvas id="analysis-method-radar" aria-label="Радар приоритетов методик"></canvas>
-        </div>
-      </div>
+
+      <h4 class="analysis-practice-heading">Глобальные приоритеты методик:</h4>
+      <ol class="analysis-global-list">${globalListHtml}</ol>
+
+      <p class="analysis-why"><strong>Почему ${escapeHtml(bestMethod.name)}?</strong> ${reasonHtml}</p>
     </div>
 
     <div class="analysis-card">
-      <h3 class="analysis-card-title">Локальные приоритеты методик по критериям</h3>
+      <h3 class="analysis-card-title">Согласованность (CR)</h3>
+      <p class="form-hint">Критерии: ${crBadgeHtml(criteriaCR, criteriaConsistent)}</p>
+      <p class="diagram-ref">Матрицы методик по критериям:</p>
+      <p class="diagram-ref">${localCrHtml}</p>
+    </div>
+
+    <div class="analysis-card">
+      <h3 class="analysis-card-title">Локальные приоритеты методик</h3>
       <div class="table-wrap">
         <table class="local-priorities-table">
           <thead>${localTableHead}</thead>
           <tbody>${localTableBody}</tbody>
         </table>
       </div>
-      <p class="diagram-ref" style="margin-top:0.75rem">CR по критериям:</p>
-      <p class="diagram-ref">${localCrHtml}</p>
-    </div>
-
-    <details class="analysis-details">
-      <summary>Шаги расчёта МАИ (F1–F6)</summary>
-      <ul class="analysis-pipeline">${pipelineHtml}</ul>
-    </details>`;
+    </div>`;
 
   const host = document.getElementById("analysis-result");
   setAnalysisEmptyVisible(false);
   host.classList.remove("hidden");
   host.innerHTML = html;
-  requestAnimationFrame(() => {
-    const canvas = document.getElementById("analysis-method-radar");
-    void updateMethodologyPriorityRadar(canvas, {
-      methods: state.methods,
-      globalPriorities: global,
-    }).catch((e) => console.error("Радар методик:", e));
-  });
+  destroyAnalysisRadarChart();
 }
 
 document.getElementById("btn-run-analysis").addEventListener("click", () => {
@@ -1531,11 +1653,8 @@ function renderSettings() {
   state.criteria.forEach((c, ci) => {
     const row = document.createElement("div");
     row.className = "settings-row";
-    const imp = state.criteriaImportance[ci] ?? SCORE_DEFAULT;
     row.innerHTML = `
       <input type="text" data-ci="${ci}" class="crit-name" value="${escapeHtml(c.name)}" />
-      <label class="importance-label">Справ. важность <span class="importance-val" id="imp-val-${ci}">${imp}</span></label>
-      <input type="range" min="${SCORE_MIN}" max="${SCORE_MAX}" step="1" data-ci="${ci}" class="crit-imp" value="${imp}" />
       <button type="button" class="btn btn-danger btn-rm-crit" data-ci="${ci}" ${state.criteria.length <= 1 ? "disabled" : ""}>Удалить</button>
     `;
     critList.appendChild(row);
@@ -1546,17 +1665,6 @@ function renderSettings() {
       const ci = parseInt(inp.getAttribute("data-ci"), 10);
       state.criteria[ci].name = inp.value.trim() || state.criteria[ci].name;
       await persist();
-      renderMethodScoresTable();
-    });
-  });
-  critList.querySelectorAll(".crit-imp").forEach((rng) => {
-    rng.addEventListener("input", async () => {
-      const ci = parseInt(rng.getAttribute("data-ci"), 10);
-      const v = parseInt(rng.value, 10);
-      state.criteriaImportance[ci] = v;
-      const span = document.getElementById(`imp-val-${ci}`);
-      if (span) span.textContent = String(v);
-      await persist();
     });
   });
   critList.querySelectorAll(".btn-rm-crit").forEach((btn) => {
@@ -1564,10 +1672,7 @@ function renderSettings() {
       if (state.criteria.length <= 1) return;
       const ci = parseInt(btn.getAttribute("data-ci"), 10);
       state.criteria.splice(ci, 1);
-      state.criteriaImportance.splice(ci, 1);
-      for (let mi = 0; mi < state.methodScores.length; mi++) {
-        state.methodScores[mi].splice(ci, 1);
-      }
+      syncAllStudentsMatrices((st) => st.localMatrices.splice(ci, 1));
       await persist();
       renderSettings();
     });
@@ -1588,7 +1693,6 @@ function renderSettings() {
       const mi = parseInt(inp.getAttribute("data-mi"), 10);
       state.methods[mi].name = inp.value.trim() || state.methods[mi].name;
       await persist();
-      renderMethodScoresTable();
     });
   });
   methList.querySelectorAll(".btn-rm-meth").forEach((btn) => {
@@ -1596,63 +1700,200 @@ function renderSettings() {
       if (state.methods.length <= 2) return;
       const mi = parseInt(btn.getAttribute("data-mi"), 10);
       state.methods.splice(mi, 1);
-      state.methodScores.splice(mi, 1);
+      syncAllStudentsMatrices((st) => {
+        st.localMatrices = st.localMatrices.map((mat) => removeMethodFromMatrices([mat], mi)[0]);
+      });
       await persist();
       renderSettings();
     });
   });
-
-  renderMethodScoresTable();
 }
 
-function renderMethodScoresTable() {
-  const thead = document.getElementById("method-scores-thead");
-  const tbody = document.getElementById("method-scores-tbody");
-  const k = state.criteria.length;
-  const m = state.methods.length;
-  thead.innerHTML = `<tr><th class="method-col">Методика</th>${state.criteria.map((c) => `<th>${escapeHtml(c.name)}</th>`).join("")}</tr>`;
-  tbody.innerHTML = "";
-  for (let mi = 0; mi < m; mi++) {
-    const tr = document.createElement("tr");
-    const nameCell = document.createElement("td");
-    nameCell.className = "method-col";
-    nameCell.textContent = state.methods[mi].name;
-    tr.appendChild(nameCell);
-    for (let ci = 0; ci < k; ci++) {
-      const td = document.createElement("td");
-      const sel = document.createElement("select");
-      for (let v = SCORE_MIN; v <= SCORE_MAX; v++) {
-        const o = document.createElement("option");
-        o.value = String(v);
-        o.textContent = String(v);
-        sel.appendChild(o);
-      }
-      sel.value = String(state.methodScores[mi][ci] ?? SCORE_DEFAULT);
-      sel.addEventListener("change", async () => {
-        state.methodScores[mi][ci] = parseInt(sel.value, 10);
-        await persist();
-      });
-      td.appendChild(sel);
-      tr.appendChild(td);
+function methodMatrixLabel(idx) {
+  return `М${idx + 1}`;
+}
+
+function isMatrixAllOnes(matrix) {
+  const m = matrix.length;
+  for (let i = 0; i < m; i++) {
+    for (let j = i + 1; j < m; j++) {
+      if (Math.abs(getPairwiseValue(matrix, i, j) - 1) > 0.01) return false;
     }
-    tbody.appendChild(tr);
   }
+  return true;
+}
+
+function renderStudentPairwiseMatrices(student) {
+  const host = document.getElementById("student-pairwise-matrices");
+  if (!host) return;
+  const matrices = ensureStudentLocalMatrices(student);
+  renderPairwiseMatricesUI(host, matrices, persist);
+}
+
+function renderPairwiseMatricesUI(host, matrices, onChange) {
+  if (!host) return;
+  const m = state.methods.length;
+  host.innerHTML = "";
+
+  if (m < 2) {
+    host.innerHTML = '<p class="diagram-ref">Добавьте минимум 2 методики в разделе «Правила».</p>';
+    return;
+  }
+
+  state.criteria.forEach((c, ci) => {
+    const matrix = matrices[ci];
+    const block = document.createElement("div");
+    block.className = "pairwise-criterion-block";
+
+    const title = document.createElement("h4");
+    title.className = "pairwise-criterion-title";
+    title.textContent = `Матрица для критерия «${c.name}»`;
+    block.appendChild(title);
+
+    const legend = document.createElement("div");
+    legend.className = "pairwise-method-legend";
+    state.methods.forEach((meth, mi) => {
+      const chip = document.createElement("span");
+      chip.className = "pairwise-legend-chip";
+      chip.title = meth.name;
+      chip.innerHTML = `<strong>${escapeHtml(methodMatrixLabel(mi))}</strong> — ${escapeHtml(meth.name)}`;
+      legend.appendChild(chip);
+    });
+    block.appendChild(legend);
+
+    const defaultNote = document.createElement("p");
+    defaultNote.className = "pairwise-default-note";
+    defaultNote.textContent =
+      "Сейчас все методики равны (1). Измените ячейки выше диагонали — иначе в анализе у каждой будет одинаковый приоритет.";
+    defaultNote.hidden = !isMatrixAllOnes(matrix);
+    block.appendChild(defaultNote);
+
+    const matrixWrap = document.createElement("div");
+    matrixWrap.className = "table-wrap pairwise-matrix-wrap";
+    const grid = document.createElement("table");
+    grid.className = "pairwise-matrix-grid";
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    const corner = document.createElement("th");
+    corner.className = "pairwise-matrix-corner";
+    corner.innerHTML =
+      '<span class="pairwise-corner-top">столбец →</span><span class="pairwise-corner-bottom">строка ↓ важнее</span>';
+    headRow.appendChild(corner);
+
+    state.methods.forEach((meth, mi) => {
+      const th = document.createElement("th");
+      th.className = "pairwise-matrix-col-head";
+      th.title = meth.name;
+      th.innerHTML = `<span class="pairwise-matrix-label">${escapeHtml(methodMatrixLabel(mi))}</span>`;
+      headRow.appendChild(th);
+    });
+    thead.appendChild(headRow);
+    grid.appendChild(thead);
+
+    const hintBar = document.createElement("p");
+    hintBar.className = "pairwise-active-hint";
+    hintBar.textContent = "Наведите на ячейку или выберите значение — здесь появится пояснение.";
+
+    const tbody = document.createElement("tbody");
+    for (let i = 0; i < m; i++) {
+      const tr = document.createElement("tr");
+      const rowTh = document.createElement("th");
+      rowTh.scope = "row";
+      rowTh.className = "pairwise-matrix-row-head";
+      rowTh.title = state.methods[i].name;
+      rowTh.innerHTML = `<span class="pairwise-matrix-label">${escapeHtml(methodMatrixLabel(i))}</span>`;
+      tr.appendChild(rowTh);
+
+      for (let j = 0; j < m; j++) {
+        const td = document.createElement("td");
+        td.className = "pairwise-matrix-cell";
+        td.dataset.i = String(i);
+        td.dataset.j = String(j);
+
+        if (i === j) {
+          td.classList.add("pairwise-matrix-diag");
+          td.textContent = "1";
+        } else if (i < j) {
+          const left = state.methods[i].name;
+          const right = state.methods[j].name;
+          td.classList.add("pairwise-matrix-editable");
+
+          const sel = document.createElement("select");
+          sel.className = "pairwise-matrix-select";
+          sel.setAttribute(
+            "aria-label",
+            `${methodMatrixLabel(i)} (${left}) важнее ${methodMatrixLabel(j)} (${right})`
+          );
+          SAATY_VALUES.forEach((v) => {
+            const o = document.createElement("option");
+            o.value = formatSaatyValue(v);
+            o.textContent = formatSaatyValue(v);
+            sel.appendChild(o);
+          });
+          const current = getPairwiseValue(matrix, i, j);
+          sel.value = formatSaatyValue(current);
+
+          const showHint = () => {
+            hintBar.textContent = saatyComparisonHint(parseSaatyValue(sel.value), left, right);
+          };
+
+          sel.addEventListener("focus", showHint);
+          sel.addEventListener("mouseenter", showHint);
+          sel.addEventListener("change", async () => {
+            const v = parseSaatyValue(sel.value);
+            setPairwiseValue(matrix, i, j, v);
+            const recip = grid.querySelector(`td[data-i="${j}"][data-j="${i}"]`);
+            if (recip) recip.textContent = formatSaatyValue(matrix[j][i]);
+            showHint();
+            defaultNote.hidden = !isMatrixAllOnes(matrix);
+            await onChange();
+          });
+
+          td.appendChild(sel);
+        } else {
+          td.classList.add("pairwise-matrix-reciprocal");
+          td.title = "Считается автоматически";
+          td.textContent = formatSaatyValue(matrix[i][j]);
+        }
+
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+    grid.appendChild(tbody);
+    matrixWrap.appendChild(grid);
+    block.appendChild(matrixWrap);
+
+    const footnote = document.createElement("p");
+    footnote.className = "pairwise-matrix-footnote";
+    footnote.textContent =
+      "Заполняйте только ячейки выше диагонали (белые). Ниже диагонали — обратные значения, они обновляются сами.";
+    block.appendChild(footnote);
+    block.appendChild(hintBar);
+
+    host.appendChild(block);
+  });
+}
+
+function renderPairwiseMatricesInto(host, matrices, onChange) {
+  renderPairwiseMatricesUI(host, matrices, onChange);
 }
 
 document.getElementById("btn-add-criterion").addEventListener("click", async () => {
   state.criteria.push({ id: uid(), name: "Новый критерий" });
-  state.criteriaImportance.push(SCORE_DEFAULT);
-  for (let mi = 0; mi < state.methodScores.length; mi++) {
-    state.methodScores[mi].push(SCORE_DEFAULT);
-  }
+  const m = state.methods.length;
+  syncAllStudentsMatrices((st) => st.localMatrices.push(createOnesMatrix(m)));
   await persist();
   renderSettings();
 });
 
 document.getElementById("btn-add-method").addEventListener("click", async () => {
-  const k = state.criteria.length;
+  const oldM = state.methods.length;
   state.methods.push({ id: uid(), name: "Новая методика" });
-  state.methodScores.push(Array.from({ length: k }, () => SCORE_DEFAULT));
+  syncAllStudentsMatrices((st) => {
+    st.localMatrices = resizeLocalMatrices(st.localMatrices, oldM, oldM + 1);
+  });
   await persist();
   renderSettings();
 });
@@ -1665,8 +1906,6 @@ document.getElementById("btn-export-json").addEventListener("click", () => {
         {
           criteria: state.criteria,
           methods: state.methods,
-          criteriaImportance: state.criteriaImportance,
-          methodScores: state.methodScores,
         },
         null,
         2
@@ -1694,12 +1933,7 @@ document.getElementById("import-file").addEventListener("change", (e) => {
       const o = JSON.parse(r.result);
       if (o.criteria) state.criteria = o.criteria;
       if (o.methods) state.methods = o.methods;
-      if (o.criteriaImportance) state.criteriaImportance = o.criteriaImportance;
-      if (o.methodScores) state.methodScores = o.methodScores;
-      if (o.criteriaMatrix && o.localMatrices) {
-        state.criteriaMatrix = o.criteriaMatrix;
-        state.localMatrices = o.localMatrices;
-      }
+      if (o.localMatrices) state.localMatrices = o.localMatrices;
       migrateAndNormalize(state);
       await persist();
       renderSettings();

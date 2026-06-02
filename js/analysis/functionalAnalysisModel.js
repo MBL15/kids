@@ -6,34 +6,39 @@ import { algorithmRecommendTeachingMethodAhp } from "./recommendationAlgorithms.
 
 export const FUNCTIONAL_PIPELINE_OVERVIEW = [
   {
-    id: "F1",
-    title: "Оценка ученика по критериям",
-    detail: "Агрегация оценок уроков в шкалу 1–10 по каждому критерию (теория, графики, задачи и т.д.).",
-  },
-  {
-    id: "F2",
+    id: "3.1",
     title: "Расчёт дефицита знаний",
-    detail: "Дефицит = 10 − оценка + 1. Чем ниже оценка, тем выше дефицит и важность улучшения.",
+    detail: "Оценки 1–10 → дефицит = 10 − оценка + 1. Чем ниже оценка, тем выше дефицит.",
   },
   {
-    id: "F3",
-    title: "Матрица критериев и веса",
-    detail: "Попарное сравнение критериев через дефициты; собственный вектор матрицы → веса (сумма 100%).",
+    id: "3.2",
+    title: "Построение матрицы критериев",
+    detail: "Дефициты критериев → попарные сравнения (дефицит А / дефицит Б).",
   },
   {
-    id: "F4",
+    id: "3.3",
+    title: "Расчёт весов критериев",
+    detail: "Собственный вектор матрицы критериев → веса (сумма 100%).",
+  },
+  {
+    id: "3.4",
     title: "Проверка согласованности (CR)",
-    detail: "CR < 0.1 — согласованность достигнута; иначе данные противоречивы.",
+    detail: "CR < 0.1 — согласованность достигнута; иначе рекомендация может быть ненадёжной.",
   },
   {
-    id: "F5",
+    id: "3.5",
     title: "Локальные приоритеты методик",
     detail: "Для каждого критерия — матрица сравнения методик и её собственный вектор.",
   },
   {
-    id: "F6",
+    id: "3.6",
     title: "Глобальные приоритеты",
-    detail: "Σ (вес критерия × локальный приоритет методики). Максимум → рекомендация.",
+    detail: "Σ (вес критерия × локальный приоритет методики по этому критерию).",
+  },
+  {
+    id: "3.7",
+    title: "Выбор лучшей методики",
+    detail: "Методика с максимальным глобальным приоритетом становится рекомендацией.",
   },
 ];
 
@@ -45,36 +50,40 @@ export const FUNCTIONAL_PIPELINE_OVERVIEW = [
  */
 export function runFunctionalScoreAnalysis(ctx) {
   const { criterionIds, lessons, localMatrices } = ctx;
-  const result = algorithmRecommendTeachingMethodAhp({ lessons, criterionIds, localMatrices });
+  const result = algorithmRecommendTeachingMethodAhp({
+    lessons,
+    criterionIds,
+    localMatrices,
+  });
 
   const steps = [];
 
   steps.push({
-    id: "F1",
-    title: "Оценка ученика по критериям (1–10)",
-    input: "Оценки по урокам для каждого критерия.",
-    output: `Средние оценки: ${result.scores10.map((s) => s.toFixed(1)).join(", ")}.`,
-    data: { scores10: result.scores10, criterionIds },
-  });
-
-  steps.push({
-    id: "F2",
+    id: "3.1",
     title: "Расчёт дефицита знаний",
-    input: "Оценки 1–10.",
+    input: "Средние оценки 1–10 по урокам.",
     output: `Дефициты: ${result.deficits.map((d) => d.toFixed(1)).join(", ")}.`,
-    data: { deficits: result.deficits },
+    data: { scores10: result.scores10, deficits: result.deficits },
   });
 
   steps.push({
-    id: "F3",
-    title: "Матрица критериев и веса",
-    input: "Дефициты критериев → попарные отношения.",
+    id: "3.2",
+    title: "Построение матрицы критериев",
+    input: "Дефициты критериев → попарные отношения (дефицит А / дефицит Б).",
+    output: "Матрица попарных сравнений критериев построена.",
+    data: { criteriaMatrix: result.criteriaMatrix },
+  });
+
+  steps.push({
+    id: "3.3",
+    title: "Расчёт весов критериев",
+    input: "Матрица попарных сравнений критериев.",
     output: `Веса: ${result.critW.map((w) => `${(w * 100).toFixed(1)}%`).join(", ")}.`,
-    data: { critW: result.critW, criteriaMatrix: result.criteriaMatrix },
+    data: { critW: result.critW },
   });
 
   steps.push({
-    id: "F4",
+    id: "3.4",
     title: "Проверка согласованности (CR)",
     input: "Матрица критериев.",
     output: `CR = ${result.criteriaCR.toFixed(3)} (${result.criteriaConsistent ? "согласовано" : "есть противоречия"}).`,
@@ -82,7 +91,7 @@ export function runFunctionalScoreAnalysis(ctx) {
   });
 
   steps.push({
-    id: "F5",
+    id: "3.5",
     title: "Локальные приоритеты методик",
     input: "Матрицы сравнения методик по каждому критерию.",
     output: `${result.localPriorities.length} локальных векторов приоритетов.`,
@@ -94,12 +103,19 @@ export function runFunctionalScoreAnalysis(ctx) {
   });
 
   steps.push({
-    id: "F6",
-    title: "Глобальные приоритеты и рекомендация",
+    id: "3.6",
+    title: "Глобальные приоритеты",
     input: "Веса критериев × локальные приоритеты.",
-    output: `Лучшая методика: индекс ${result.bestIdx}, приоритет ${(result.globalPriorities[result.bestIdx] * 100).toFixed(1)}%.`,
+    output: `Приоритеты: ${result.globalPriorities.map((p) => `${(p * 100).toFixed(1)}%`).join(", ")}.`,
+    data: { global: result.globalPriorities },
+  });
+
+  steps.push({
+    id: "3.7",
+    title: "Выбор лучшей методики",
+    input: "Глобальные приоритеты.",
+    output: `Рекомендация: индекс ${result.bestIdx}, приоритет ${(result.globalPriorities[result.bestIdx] * 100).toFixed(1)}%.`,
     data: {
-      global: result.globalPriorities,
       bestIdx: result.bestIdx,
       marginFirstSecond: result.marginFirstSecond,
       ranking: result.ranking,
@@ -109,6 +125,7 @@ export function runFunctionalScoreAnalysis(ctx) {
   return {
     scores10: result.scores10,
     deficits: result.deficits,
+    criteriaMatrix: result.criteriaMatrix,
     critW: result.critW,
     criteriaCR: result.criteriaCR,
     criteriaConsistent: result.criteriaConsistent,
