@@ -35,24 +35,73 @@
             <p class="auth-subtitle">Подбор методики преподавания</p>
           </div>
         </div>
-        <h2>Вход в систему</h2>
-        <p class="flow-hint">
-          Создайте аккаунт или войдите. Данные хранятся на сервере.
-        </p>
-        <div id="auth-msg"></div>
-        <div class="form-stack">
-          <div>
-            <label for="login-user">Логин</label>
-            <input type="text" id="login-user" autocomplete="username" placeholder="Ваш логин" />
-          </div>
-          <div>
-            <label for="login-pass">Пароль</label>
-            <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••" />
+
+        <div id="auth-step-role">
+          <h2>Выберите роль</h2>
+          <p class="flow-hint">Методист настраивает правила и матрицы. Репетитор ведёт уроки и запускает анализ.</p>
+          <div class="auth-role-grid">
+            <button type="button" class="auth-role-card" data-auth-role="methodist">
+              <span class="auth-role-title">Методист</span>
+              <span class="auth-role-desc">Критерии, методики, попарное сравнение для учеников</span>
+            </button>
+            <button type="button" class="auth-role-card" data-auth-role="tutor">
+              <span class="auth-role-title">Репетитор</span>
+              <span class="auth-role-desc">Оценки после уроков, расписание, анализ и рекомендация</span>
+            </button>
           </div>
         </div>
-        <div class="auth-actions">
-          <button class="btn btn-primary" id="btn-login">Войти</button>
-          <button class="btn btn-secondary" id="btn-register">Регистрация</button>
+
+        <div id="auth-step-login" class="hidden">
+          <button type="button" class="btn btn-ghost btn-sm auth-back-btn" id="btn-auth-back-login">← Выбрать другую роль</button>
+          <h2 id="auth-login-title">Вход</h2>
+          <p class="flow-hint" id="auth-login-hint">Введите логин и пароль.</p>
+          <div id="auth-login-msg"></div>
+          <div class="form-stack auth-form-stack">
+            <div>
+              <label for="auth-login-user">Логин</label>
+              <input type="text" id="auth-login-user" autocomplete="username" placeholder="Ваш логин" />
+            </div>
+            <div>
+              <label for="auth-login-pass">Пароль</label>
+              <input type="password" id="auth-login-pass" autocomplete="current-password" placeholder="••••••••" />
+            </div>
+          </div>
+          <div class="auth-actions auth-actions-single">
+            <button type="button" class="btn btn-primary btn-block" id="btn-login">Войти</button>
+          </div>
+          <p class="auth-switch">
+            Нет аккаунта?
+            <button type="button" class="auth-switch-link" id="btn-go-register">Зарегистрироваться</button>
+          </p>
+        </div>
+
+        <div id="auth-step-register" class="hidden">
+          <button type="button" class="btn btn-ghost btn-sm auth-back-btn" id="btn-auth-back-register">← Выбрать другую роль</button>
+          <h2 id="auth-register-title">Регистрация</h2>
+          <p class="flow-hint" id="auth-register-hint">Создайте новый аккаунт.</p>
+          <div id="auth-register-msg"></div>
+          <div class="form-stack auth-form-stack">
+            <div id="auth-register-methodist-field" class="hidden">
+              <label for="auth-register-methodist">Логин методиста <span class="req">*</span></label>
+              <input type="text" id="auth-register-methodist" autocomplete="off" placeholder="Например, methodist" />
+              <p class="field-hint">Сначала должен быть зарегистрирован аккаунт методиста с этим логином.</p>
+            </div>
+            <div>
+              <label for="auth-register-user">Ваш логин <span class="req">*</span></label>
+              <input type="text" id="auth-register-user" autocomplete="username" placeholder="Придумайте логин от 2 символов" />
+            </div>
+            <div>
+              <label for="auth-register-pass">Пароль <span class="req">*</span></label>
+              <input type="password" id="auth-register-pass" autocomplete="new-password" placeholder="Не короче 4 символов" />
+            </div>
+          </div>
+          <div class="auth-actions auth-actions-single">
+            <button type="button" class="btn btn-primary btn-block" id="btn-register">Создать аккаунт</button>
+          </div>
+          <p class="auth-switch">
+            Уже есть аккаунт?
+            <button type="button" class="auth-switch-link" id="btn-go-login">Войти</button>
+          </p>
         </div>
       </div>
     </div>
@@ -73,34 +122,34 @@
         </div>
 
         <nav class="sidebar-nav" id="main-nav">
-          <button type="button" class="nav-item active" data-view="home">
+          <button type="button" class="nav-item active" data-view="home" data-role="tutor">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z" />
               <path d="M9 21V12h6v9" />
             </svg>
             Главная
           </button>
-          <button type="button" class="nav-item" data-view="students">
+          <button type="button" class="nav-item" data-view="students" data-role="both">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="8" r="4" />
               <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
             </svg>
             Ученики
           </button>
-          <button type="button" class="nav-item" data-view="schedule">
+          <button type="button" class="nav-item" data-view="schedule" data-role="tutor">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="3" y="4" width="18" height="18" rx="2" />
               <path d="M16 2v4M8 2v4M3 10h18" />
             </svg>
             Расписание
           </button>
-          <button type="button" class="nav-item" data-view="analysis">
+          <button type="button" class="nav-item" data-view="analysis" data-role="tutor">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M4 19V5M4 19h16M8 15l3-4 3 2 5-6" />
             </svg>
             Анализ
           </button>
-          <button type="button" class="nav-item" data-view="settings">
+          <button type="button" class="nav-item" data-view="settings" data-role="methodist">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="12" cy="12" r="3" />
               <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
@@ -160,7 +209,7 @@
         <div class="page-layout">
           <main class="page-main">
             <section id="view-students" class="view-section hidden">
-              <div class="dashboard-top">
+              <div class="dashboard-top" data-role="tutor">
                 <div class="dark-card schedule-card">
                   <div class="schedule-header">
                     <h2 id="dashboard-schedule-title">Уроки на сегодня</h2>
@@ -232,14 +281,18 @@
                   <h2>Ученики</h2>
                   <p class="panel-desc">Ведение данных об учениках и оценках по урокам</p>
                 </div>
-                <div class="form-row">
+                <div class="form-row student-add-row">
                   <div class="form-field">
-                    <label for="new-student-name">Имя ученика</label>
+                    <label for="new-student-name">Имя</label>
                     <input type="text" id="new-student-name" placeholder="Например, Иван" />
                   </div>
                   <div class="form-field">
-                    <label for="new-student-notes">Заметки</label>
-                    <input type="text" id="new-student-notes" placeholder="Класс, особенности" />
+                    <label for="new-student-class">Класс</label>
+                    <input type="text" id="new-student-class" placeholder="Например, 8" />
+                  </div>
+                  <div class="form-field">
+                    <label for="new-student-subject">Предмет</label>
+                    <input type="text" id="new-student-subject" placeholder="Например, математика" />
                   </div>
                   <button class="btn btn-primary" id="btn-add-student">Добавить</button>
                 </div>
@@ -249,7 +302,9 @@
                     <thead>
                       <tr>
                         <th>Имя</th>
-                        <th>Уроков</th>
+                        <th>Класс</th>
+                        <th>Предмет</th>
+                        <th class="col-lessons" data-role="tutor">Уроков</th>
                         <th>Действия</th>
                       </tr>
                     </thead>
@@ -266,9 +321,12 @@
                     <div class="student-hero-avatar" id="student-hero-avatar" aria-hidden="true">?</div>
                     <div class="student-hero-text">
                       <h2 id="student-detail-title">Ученик</h2>
-                      <p class="student-hero-notes" id="student-detail-hint"></p>
+                      <div class="student-hero-meta student-hero-meta-top">
+                        <span class="hero-chip" id="student-class-chip">— класс</span>
+                        <span class="hero-chip hero-chip-subject" id="student-subject-chip">— предмет</span>
+                      </div>
                       <div class="student-hero-meta">
-                        <span class="hero-chip" id="student-lesson-count">0 уроков</span>
+                        <span class="hero-chip" id="student-lesson-count" data-role="tutor">0 уроков</span>
                         <span class="hero-chip hero-chip-muted" id="student-criteria-count">3 критерия</span>
                       </div>
                     </div>
@@ -277,7 +335,7 @@
                 </div>
                 <input type="hidden" id="current-student-id" />
 
-                <div id="student-radar-wrap" class="radar-wrap hidden">
+                <div id="student-radar-wrap" class="radar-wrap hidden" data-role="tutor">
                   <h3 class="section-title">Профиль успеваемости</h3>
                   <p class="diagram-ref">
                     Средние баллы по критериям по всем занятиям (шкала 2–5).
@@ -287,7 +345,7 @@
                   </div>
                 </div>
 
-                <div class="student-pairwise-section">
+                <div class="student-pairwise-section" data-role="methodist">
                   <h3 class="section-title">Этап 2. Матрицы сравнения методик</h3>
                   <p class="diagram-ref pairwise-section-lead">
                     Один раз для ученика. В каждой матрице заполните ячейки <strong>выше диагонали</strong> — насколько методика в строке важнее методики в столбце.
@@ -311,7 +369,7 @@
                   <div id="student-pairwise-matrices" class="pairwise-matrices"></div>
                 </div>
 
-                <div class="lesson-form-card">
+                <div class="lesson-form-card" data-role="tutor">
                   <div class="lesson-form-header">
                     <div>
                       <h3 class="section-title section-title-inline">Новая запись урока</h3>
@@ -344,7 +402,7 @@
                   </div>
                 </div>
 
-                <div class="lesson-history">
+                <div class="lesson-history" data-role="tutor">
                   <h3 class="section-title">История занятий</h3>
                   <div id="lessons-empty" class="lessons-empty hidden">
                     <div class="lessons-empty-icon" aria-hidden="true">📋</div>
@@ -434,22 +492,6 @@
                 </div>
 
                 <div id="analysis-result" class="analysis-result hidden"></div>
-
-                <details class="analysis-models" id="analysis-models-block">
-                  <summary>Справка: даталогическая и функциональная модель</summary>
-                  <div class="model-columns">
-                    <div class="model-card">
-                      <h3 class="model-card-title">Даталогическая модель</h3>
-                      <p class="diagram-ref">Сущности и связи (концептуальный уровень).</p>
-                      <ul id="data-logical-list" class="model-list"></ul>
-                    </div>
-                    <div class="model-card">
-                      <h3 class="model-card-title">Функциональная модель</h3>
-                      <p class="diagram-ref">Поток обработки от оценок до рекомендации.</p>
-                      <ol id="functional-model-list" class="model-list model-list-numbered"></ol>
-                    </div>
-                  </div>
-                </details>
               </div>
             </section>
 
@@ -479,7 +521,7 @@
             </section>
           </main>
 
-          <aside class="page-aside hidden" id="page-aside">
+          <aside class="page-aside hidden" id="page-aside" data-role="tutor">
             <div class="card aside-card">
               <div class="aside-header">
                 <h3>Ближайшие задачи</h3>

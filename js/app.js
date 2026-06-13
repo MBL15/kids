@@ -13,8 +13,7 @@ import {
   parseSaatyValue,
   saatyComparisonHint,
 } from "./ahp.js";
-import { ENTITY_RELATIONS } from "./analysis/dataLogicalModel.js";
-import { runFunctionalScoreAnalysis, FUNCTIONAL_PIPELINE_OVERVIEW } from "./analysis/functionalAnalysisModel.js";
+import { runFunctionalScoreAnalysis } from "./analysis/functionalAnalysisModel.js";
 import { SCORE_MIN, SCORE_MAX, SCORE_DEFAULT } from "./data.js";
 import {
   updateStudentRadarChart,
@@ -24,6 +23,159 @@ import {
 } from "./studentRadar.js";
 
 const TOKEN_KEY = "ahp_token";
+const ROLE_KEY = "ahp_role";
+const METHODIST_KEY = "ahp_methodist_login";
+
+function isMethodist() {
+  return state.userRole === "methodist";
+}
+
+function isTutor() {
+  return state.userRole === "tutor";
+}
+
+function defaultViewForRole() {
+  return isMethodist() ? "students" : "home";
+}
+
+let authSelectedRole = null;
+
+function applyRoleUi() {
+  const role = state.userRole || "tutor";
+
+  document.querySelectorAll("#main-nav .nav-item[data-view]").forEach((btn) => {
+    const allowed = btn.getAttribute("data-role");
+    const show = allowed === "both" || allowed === role;
+    btn.classList.toggle("hidden", !show);
+  });
+
+  document.querySelectorAll("[data-role='tutor']").forEach((el) => {
+    if (el.closest("#main-nav")) return;
+    el.classList.toggle("hidden", role === "methodist");
+  });
+  document.querySelectorAll("[data-role='methodist']").forEach((el) => {
+    if (el.closest("#main-nav")) return;
+    el.classList.toggle("hidden", role === "tutor");
+  });
+
+  document.querySelectorAll("#user-menu-panel .dropdown-item[data-goto]").forEach((btn) => {
+    const v = btn.getAttribute("data-goto");
+    const show =
+      v === "students" ||
+      (v === "settings" && role === "methodist") ||
+      (v !== "settings" && role === "tutor");
+    btn.classList.toggle("hidden", !show);
+  });
+
+  const panelDesc = document.querySelector("#students-panel .panel-desc");
+  if (panelDesc) {
+    panelDesc.textContent =
+      role === "methodist"
+        ? "Список учеников и матрицы попарного сравнения методик"
+        : "Ведение данных об учениках и оценках по урокам";
+  }
+
+  const lessonsCol = document.querySelector("#students-panel thead th.col-lessons");
+  if (lessonsCol) lessonsCol.classList.toggle("hidden", role === "methodist");
+}
+
+function migrateStudentFields(student) {
+  if (!student.class?.trim() && student.notes?.trim()) {
+    student.class = String(student.notes).trim();
+  }
+  student.class = String(student.class ?? "").trim();
+  student.subject = String(student.subject ?? "").trim();
+  delete student.notes;
+}
+
+function formatStudentClassLabel(className) {
+  const value = String(className ?? "").trim();
+  if (!value) return "Класс не указан";
+  return /\bкласс/i.test(value) ? value : `${value} класс`;
+}
+
+function formatStudentSubjectLabel(subject) {
+  const value = String(subject ?? "").trim();
+  return value || "Предмет не указан";
+}
+
+function studentSummaryLine(student) {
+  const parts = [student.name];
+  if (student.class?.trim()) parts.push(formatStudentClassLabel(student.class));
+  if (student.subject?.trim()) parts.push(formatStudentSubjectLabel(student.subject));
+  return parts.join(" · ");
+}
+
+function guardViewForRole(view) {
+  const resolved = view === "home" ? "students" : view;
+  if (isMethodist() && ["home", "schedule", "analysis"].includes(resolved)) return "students";
+  if (isTutor() && resolved === "settings") return "students";
+  return view;
+}
+
+function hideAuthSteps() {
+  document.getElementById("auth-step-role")?.classList.add("hidden");
+  document.getElementById("auth-step-login")?.classList.add("hidden");
+  document.getElementById("auth-step-register")?.classList.add("hidden");
+}
+
+function setAuthMsg(html, type, step = "login") {
+  const id = step === "register" ? "auth-register-msg" : "auth-login-msg";
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = `msg ${type || ""}`;
+  if (!html) {
+    el.className = "msg hidden";
+    el.innerHTML = "";
+    return;
+  }
+  el.classList.remove("hidden");
+  el.innerHTML = html;
+}
+
+function showAuthRoleStep() {
+  authSelectedRole = null;
+  hideAuthSteps();
+  document.getElementById("auth-step-role")?.classList.remove("hidden");
+  setAuthMsg("", "", "login");
+  setAuthMsg("", "", "register");
+}
+
+function updateAuthStepCopy(role) {
+  const isTutorRole = role === "tutor";
+  const roleLabel = isTutorRole ? "репетитора" : "методиста";
+
+  document.getElementById("auth-login-title").textContent = isTutorRole ? "Вход — репетитор" : "Вход — методист";
+  document.getElementById("auth-login-hint").textContent = `Введите логин и пароль аккаунта ${roleLabel}.`;
+
+  document.getElementById("auth-register-title").textContent = isTutorRole ? "Регистрация — репетитор" : "Регистрация — методист";
+  document.getElementById("auth-register-hint").textContent = isTutorRole
+    ? "Укажите логин методиста, затем придумайте свой логин и пароль."
+    : "Придумайте логин и пароль для нового аккаунта методиста.";
+
+  document.getElementById("auth-register-methodist-field")?.classList.toggle("hidden", !isTutorRole);
+}
+
+function showAuthLoginStep(role) {
+  authSelectedRole = role;
+  hideAuthSteps();
+  updateAuthStepCopy(role);
+  document.getElementById("auth-step-login")?.classList.remove("hidden");
+  setAuthMsg("", "", "login");
+  document.getElementById("auth-login-user")?.focus();
+}
+
+function showAuthRegisterStep(role) {
+  authSelectedRole = role;
+  hideAuthSteps();
+  updateAuthStepCopy(role);
+  document.getElementById("auth-step-register")?.classList.remove("hidden");
+  setAuthMsg("", "", "register");
+  const focusEl = role === "tutor"
+    ? document.getElementById("auth-register-methodist")
+    : document.getElementById("auth-register-user");
+  focusEl?.focus();
+}
 
 /** Приводит к шкале 2–5; значения 1–10 (старый формат) переводит линейно. */
 function normalizeStoredScore(v) {
@@ -70,6 +222,9 @@ const state = {
   criteriaImportance: [],
   methodScores: [],
   students: [],
+  userRole: "tutor",
+  methodistLogin: null,
+  login: null,
 };
 
 const uiState = {
@@ -105,9 +260,8 @@ const HELP_CONTENT = {
       </table>
       <p class="help-note"><strong>Важно:</strong> чем ниже оценка, тем больше дефицит — система в первую очередь подтягивает слабые стороны.</p>
 
-      <h3>Этап 2. Репетитор настраивает матрицы методик (один раз для каждого ученика)</h3>
-      <p>Для каждого критерия вы заполняете таблицу сравнения методик. Отвечаете на вопрос:</p>
-      <blockquote>«Насколько одна методика важнее другой для развития этого конкретного критерия?»</blockquote>
+      <h3>Этап 2. Методист настраивает матрицы методик (для каждого ученика)</h3>
+      <p>Методист в карточке ученика заполняет таблицы сравнения методик. Репетитор этот этап не выполняет.</p>
       <p><strong>Пример для критерия «Теория»:</strong></p>
       <table class="help-doc-table">
         <thead><tr><th>Сравнение</th><th>Значение</th><th>Смысл</th></tr></thead>
@@ -133,7 +287,7 @@ const HELP_CONTENT = {
           <tr><td>1/2, 1/3…</td><td>Обратное превосходство (вторая методика важнее)</td></tr>
         </tbody>
       </table>
-      <p class="help-note"><strong>Аналогия:</strong> если вы выбираете автомобиль и для вас важна «надёжность», вы сравните марки между собой. Здесь то же самое — для каждого критерия вы сравниваете методики обучения. Заполняется в карточке ученика.</p>
+      <p class="help-note"><strong>Аналогия:</strong> если вы выбираете автомобиль и для вас важна «надёжность», вы сравните марки между собой. Здесь то же самое — для каждого критерия методист сравнивает методики обучения.</p>
 
       <h3>Этап 3. Система рассчитывает результат</h3>
       <p>Автоматически выполняются следующие шаги. <strong>Дополнительных действий от репетитора не требуется</strong> — веса критериев система выводит из ваших оценок через дефицит.</p>
@@ -172,13 +326,20 @@ const HELP_CONTENT = {
         </tbody>
       </table>
 
-      <h3>Что делать репетитору</h3>
+      <h3>Что делает репетитор</h3>
       <table class="help-doc-table">
-        <thead><tr><th>Действие</th><th>Когда</th><th>Время</th></tr></thead>
+        <thead><tr><th>Действие</th><th>Когда</th></tr></thead>
         <tbody>
-          <tr><td>Выставить оценки</td><td>При знакомстве и при изменении успеваемости</td><td>1 мин</td></tr>
-          <tr><td>Заполнить матрицы сравнения методик</td><td>Один раз для каждого ученика</td><td>5–10 мин</td></tr>
-          <tr><td>Посмотреть рекомендацию</td><td>После обновления оценок</td><td>5 сек</td></tr>
+          <tr><td>Выставить оценки после урока</td><td>После каждого занятия</td></tr>
+          <tr><td>Посмотреть рекомендацию</td><td>После обновления оценок</td></tr>
+        </tbody>
+      </table>
+      <h3>Что делает методист</h3>
+      <table class="help-doc-table">
+        <thead><tr><th>Действие</th><th>Когда</th></tr></thead>
+        <tbody>
+          <tr><td>Задать критерии и методики</td><td>Один раз или при изменении программы</td></tr>
+          <tr><td>Заполнить матрицы сравнения</td><td>Один раз для каждого ученика</td></tr>
         </tbody>
       </table>
     `,
@@ -189,7 +350,9 @@ const HELP_CONTENT = {
       <h3>Откуда берутся веса критериев?</h3>
       <p>Из попарных сравнений, которые система строит <strong>автоматически из дефицитов</strong> (10 − оценка + 1). Дополнительных действий не требуется.</p>
       <h3>Где заполнять матрицы методик (этап 2)?</h3>
-      <p>В карточке ученика — «Этап 2. Матрицы сравнения методик». Для каждого критерия сравниваете методики по шкале Saaty. Один раз на ученика.</p>
+      <p>Методист — в карточке ученика, раздел «Этап 2». Репетитор матрицы не редактирует.</p>
+      <h3>Кто задаёт критерии и методики?</h3>
+      <p>Только методист, вкладка «Правила». Репетитор использует их при оценке и анализе.</p>
       <h3>Где хранятся данные?</h3>
       <p>На сервере в SQLite (<code>data/app.db</code>).</p>
       <h3>Какая шкала оценок?</h3>
@@ -295,6 +458,7 @@ function syncAllStudentsMatrices(mutator) {
 function migrateStudentsCleanup(s) {
   migrateStudentsLocalMatrices(s);
   for (const student of s.students || []) {
+    migrateStudentFields(student);
     delete student.criterionSignificance;
   }
 }
@@ -315,7 +479,14 @@ async function bootstrapSession() {
   state.localMatrices = data.localMatrices;
   state.criteriaImportance = data.criteriaImportance;
   state.methodScores = data.methodScores;
+  state.userRole = data.role || sessionStorage.getItem(ROLE_KEY) || "tutor";
+  state.methodistLogin = data.methodistLogin || sessionStorage.getItem(METHODIST_KEY) || null;
+  state.login = data.login || sessionStorage.getItem("ahp_login") || null;
+  sessionStorage.setItem(ROLE_KEY, state.userRole);
+  if (state.methodistLogin) sessionStorage.setItem(METHODIST_KEY, state.methodistLogin);
+  else sessionStorage.removeItem(METHODIST_KEY);
 
+  applyRoleUi();
   const k = state.criteria.length;
   const m = state.methods.length;
   const hadValidMatrices = isValidLocalMatrices(state.localMatrices, k, m);
@@ -348,8 +519,9 @@ function setUserDisplay(login) {
   const name = login?.trim() || "Пользователь";
   const avatar = document.getElementById("user-avatar");
   const nameEl = document.getElementById("user-name");
+  const roleLabel = isMethodist() ? "методист" : "репетитор";
   if (avatar) avatar.textContent = name.charAt(0).toUpperCase();
-  if (nameEl) nameEl.textContent = name;
+  if (nameEl) nameEl.textContent = `${name} · ${roleLabel}`;
 }
 
 function setRingProgress(circleEl, ratio) {
@@ -721,12 +893,12 @@ function renderAsideContent() {
   if (uiState.asideMode === "groups") {
     const grouped = new Map();
     for (const s of state.students) {
-      const key = (s.notes || "").trim() || "Без группы";
+      const key = (s.class || "").trim() || "Без класса";
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key).push(s);
     }
     if (!state.students.length) {
-      asideContent.innerHTML = "<p>Добавьте учеников — они сгруппируются по полю «Заметки»</p>";
+      asideContent.innerHTML = "<p>Добавьте учеников — они сгруппируются по классу</p>";
       return;
     }
     asideContent.innerHTML = "";
@@ -841,9 +1013,11 @@ function renderDashboard() {
 function showAuth() {
   document.getElementById("app-shell")?.classList.add("hidden");
   document.getElementById("view-auth")?.classList.remove("hidden");
+  showAuthRoleStep();
 }
 
 function showApp(view, options = {}) {
+  view = guardViewForRole(view);
   const resolvedView = view === "home" ? "students" : view;
   document.getElementById("app-shell")?.classList.remove("hidden");
   document.getElementById("view-auth")?.classList.add("hidden");
@@ -857,7 +1031,7 @@ function showApp(view, options = {}) {
     btn.classList.toggle("active", btn.getAttribute("data-view") === navView);
   });
   const aside = document.getElementById("page-aside");
-  if (aside) aside.classList.toggle("hidden", resolvedView !== "students");
+  if (aside) aside.classList.toggle("hidden", resolvedView !== "students" || isMethodist());
   closeAllDropdowns();
 
   if (options.scrollTo === "students-panel") {
@@ -870,64 +1044,133 @@ function showApp(view, options = {}) {
   }
 }
 
-function setAuthMsg(html, type) {
-  const el = document.getElementById("auth-msg");
-  el.className = `msg ${type || ""}`;
-  el.innerHTML = html;
+function readLoginForm() {
+  return {
+    login: document.getElementById("auth-login-user")?.value.trim() || "",
+    password: document.getElementById("auth-login-pass")?.value || "",
+    role: authSelectedRole || sessionStorage.getItem(ROLE_KEY) || "methodist",
+  };
 }
 
+function readRegisterForm() {
+  return {
+    login: document.getElementById("auth-register-user")?.value.trim() || "",
+    password: document.getElementById("auth-register-pass")?.value || "",
+    methodistLogin: document.getElementById("auth-register-methodist")?.value.trim() || "",
+    role: authSelectedRole || sessionStorage.getItem(ROLE_KEY) || "methodist",
+  };
+}
+
+function validateLoginForm(form) {
+  if (form.login.length < 2) return "Логин должен быть не короче 2 символов.";
+  if (form.password.length < 4) return "Пароль должен быть не короче 4 символов.";
+  return null;
+}
+
+function validateRegisterForm(form) {
+  if (form.role === "tutor" && form.methodistLogin.length < 2) {
+    return "Укажите логин методиста (от 2 символов). Сначала зарегистрируйте методиста.";
+  }
+  if (form.login.length < 2) {
+    return form.role === "tutor"
+      ? "Заполните «Ваш логин» — это логин репетитора, не методиста."
+      : "Логин должен быть не короче 2 символов.";
+  }
+  if (form.password.length < 4) return "Пароль должен быть не короче 4 символов.";
+  return null;
+}
+
+async function completeAuth(data, login) {
+  sessionStorage.setItem(TOKEN_KEY, data.token);
+  sessionStorage.setItem("ahp_login", login);
+  sessionStorage.setItem(ROLE_KEY, data.role || authSelectedRole || "methodist");
+  if (data.methodistLogin) sessionStorage.setItem(METHODIST_KEY, data.methodistLogin);
+  else sessionStorage.removeItem(METHODIST_KEY);
+  const ok = await bootstrapSession();
+  if (!ok) {
+    setAuthMsg("Не удалось загрузить данные. Попробуйте войти снова.", "error", "login");
+    return false;
+  }
+  setUserDisplay(login);
+  uiState.dashboardDate = todayYmd();
+  showApp(defaultViewForRole());
+  renderStudents();
+  return true;
+}
+
+document.querySelectorAll("[data-auth-role]").forEach((btn) => {
+  btn.addEventListener("click", () => showAuthLoginStep(btn.getAttribute("data-auth-role")));
+});
+
+document.getElementById("btn-auth-back-login")?.addEventListener("click", showAuthRoleStep);
+document.getElementById("btn-auth-back-register")?.addEventListener("click", showAuthRoleStep);
+
+document.getElementById("btn-go-register")?.addEventListener("click", () => {
+  if (!authSelectedRole) {
+    showAuthRoleStep();
+    return;
+  }
+  showAuthRegisterStep(authSelectedRole);
+});
+
+document.getElementById("btn-go-login")?.addEventListener("click", () => {
+  if (!authSelectedRole) {
+    showAuthRoleStep();
+    return;
+  }
+  showAuthLoginStep(authSelectedRole);
+});
+
 document.getElementById("btn-register").addEventListener("click", async () => {
-  const login = document.getElementById("login-user").value.trim();
-  const password = document.getElementById("login-pass").value;
-  if (login.length < 2 || password.length < 4) {
-    setAuthMsg("Логин от 2 символов, пароль от 4.", "error");
+  const form = readRegisterForm();
+  const validationError = validateRegisterForm(form);
+  if (validationError) {
+    setAuthMsg(validationError, "error", "register");
     return;
   }
   const res = await fetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({
+      login: form.login,
+      password: form.password,
+      role: form.role,
+      methodistLogin: form.methodistLogin,
+    }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    setAuthMsg(data.error || "Ошибка регистрации", "error");
+    setAuthMsg(data.error || "Ошибка регистрации", "error", "register");
     return;
   }
-  sessionStorage.setItem(TOKEN_KEY, data.token);
-  sessionStorage.setItem("ahp_login", login);
-  await bootstrapSession();
-  setUserDisplay(login);
-  setAuthMsg("Аккаунт создан.", "success");
-  uiState.dashboardDate = todayYmd();
-  showApp("home");
-  renderStudents();
+  await completeAuth(data, form.login);
 });
 
 document.getElementById("btn-login").addEventListener("click", async () => {
-  const login = document.getElementById("login-user").value.trim();
-  const password = document.getElementById("login-pass").value;
+  const form = readLoginForm();
+  const validationError = validateLoginForm(form);
+  if (validationError) {
+    setAuthMsg(validationError, "error", "login");
+    return;
+  }
   const res = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login, password }),
+    body: JSON.stringify({ login: form.login, password: form.password, role: form.role }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    setAuthMsg(data.error || "Ошибка входа", "error");
+    setAuthMsg(data.error || "Ошибка входа", "error", "login");
     return;
   }
-  sessionStorage.setItem(TOKEN_KEY, data.token);
-  sessionStorage.setItem("ahp_login", login);
-  await bootstrapSession();
-  setUserDisplay(login);
-  uiState.dashboardDate = todayYmd();
-  showApp("home");
-  renderStudents();
+  await completeAuth(data, form.login);
 });
 
 document.getElementById("btn-logout").addEventListener("click", () => {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem("ahp_login");
+  sessionStorage.removeItem(ROLE_KEY);
+  sessionStorage.removeItem(METHODIST_KEY);
   closeAllDropdowns();
   showAuth();
 });
@@ -1095,17 +1338,21 @@ document.getElementById("btn-schedule-add-submit")?.addEventListener("click", as
 });
 
 function renderStudents() {
-  renderDashboard();
+  if (!isMethodist()) renderDashboard();
   const tbody = document.getElementById("students-tbody");
   tbody.innerHTML = "";
+  const openLabel = isMethodist() ? "Карточка / матрицы" : "Карточка / оценки";
   for (const s of state.students) {
     const tr = document.createElement("tr");
+    const lessonsCell = `<td class="col-lessons${isMethodist() ? " hidden" : ""}"><span class="badge">${s.lessons?.length ?? 0}</span></td>`;
     tr.innerHTML = `
       <td>${escapeHtml(s.name)}</td>
-      <td><span class="badge">${s.lessons?.length ?? 0}</span></td>
+      <td>${escapeHtml(s.class || "—")}</td>
+      <td>${escapeHtml(s.subject || "—")}</td>
+      ${lessonsCell}
       <td>
         <ul class="inline-actions">
-          <li><button class="btn btn-secondary btn-open-student" data-id="${s.id}">Карточка / оценки</button></li>
+          <li><button class="btn btn-secondary btn-open-student" data-id="${s.id}">${openLabel}</button></li>
           <li><button class="btn btn-danger btn-del-student" data-id="${s.id}">Удалить</button></li>
         </ul>
       </td>`;
@@ -1133,16 +1380,19 @@ function escapeHtml(s) {
 document.getElementById("btn-add-student").addEventListener("click", async () => {
   const name = document.getElementById("new-student-name").value.trim();
   if (!name) return;
-  const notes = document.getElementById("new-student-notes").value.trim();
+  const studentClass = document.getElementById("new-student-class").value.trim();
+  const subject = document.getElementById("new-student-subject").value.trim();
   state.students.push({
     id: uid(),
     name,
-    notes,
+    class: studentClass,
+    subject,
     lessons: [],
     localMatrices: defaultLocalMatrices(state.criteria.length, state.methods.length),
   });
   document.getElementById("new-student-name").value = "";
-  document.getElementById("new-student-notes").value = "";
+  document.getElementById("new-student-class").value = "";
+  document.getElementById("new-student-subject").value = "";
   await persist();
   renderStudents();
 });
@@ -1229,7 +1479,10 @@ function openStudent(id, options = {}) {
   if (!s) return;
   document.getElementById("current-student-id").value = id;
   document.getElementById("student-detail-title").textContent = s.name;
-  document.getElementById("student-detail-hint").textContent = s.notes?.trim() || "Заметки не указаны";
+  const classChip = document.getElementById("student-class-chip");
+  const subjectChip = document.getElementById("student-subject-chip");
+  if (classChip) classChip.textContent = formatStudentClassLabel(s.class);
+  if (subjectChip) subjectChip.textContent = formatStudentSubjectLabel(s.subject);
   const avatar = document.getElementById("student-hero-avatar");
   if (avatar) avatar.textContent = (s.name || "?").charAt(0).toUpperCase();
   const lessonCount = s.lessons?.length ?? 0;
@@ -1262,8 +1515,8 @@ function openStudent(id, options = {}) {
   updateLessonDateDisplay();
   setLessonFormMsg("", "");
   showApp("student-detail");
-  renderStudentLessons(s);
-  renderStudentPairwiseMatrices(s);
+  if (isTutor()) renderStudentLessons(s);
+  if (isMethodist()) renderStudentPairwiseMatrices(s);
 }
 
 document.getElementById("btn-back-students").addEventListener("click", () => {
@@ -1409,27 +1662,6 @@ document.getElementById("btn-add-lesson").addEventListener("click", async () => 
   renderDashboard();
 });
 
-function fillAnalysisModelListsOnce() {
-  const dl = document.getElementById("data-logical-list");
-  const fl = document.getElementById("functional-model-list");
-  if (dl && !dl.dataset.ready) {
-    dl.dataset.ready = "1";
-    ENTITY_RELATIONS.forEach((t) => {
-      const li = document.createElement("li");
-      li.textContent = t;
-      dl.appendChild(li);
-    });
-  }
-  if (fl && !fl.dataset.ready) {
-    fl.dataset.ready = "1";
-    FUNCTIONAL_PIPELINE_OVERVIEW.forEach((s) => {
-      const li = document.createElement("li");
-      li.textContent = `${s.id} — ${s.title}. ${s.detail}`;
-      fl.appendChild(li);
-    });
-  }
-}
-
 function setAnalysisEmptyVisible(visible) {
   document.getElementById("analysis-empty")?.classList.toggle("hidden", !visible);
   const result = document.getElementById("analysis-result");
@@ -1440,7 +1672,6 @@ function setAnalysisEmptyVisible(visible) {
 }
 
 function renderAnalysisForm() {
-  fillAnalysisModelListsOnce();
   destroyAnalysisRadarChart();
   const sel = document.getElementById("analysis-student");
   sel.innerHTML = `<option value="">— выберите ученика —</option>`;
@@ -1539,9 +1770,7 @@ function renderAnalysisResult(student) {
     )
     .join("");
 
-  const studentSubtitle = student.notes?.trim()
-    ? `${escapeHtml(student.name)}, ${escapeHtml(student.notes.trim())}`
-    : escapeHtml(student.name);
+  const studentSubtitle = escapeHtml(studentSummaryLine(student));
 
   const reasonHtml = buildRecommendationReason(bestIdx, deficits, localPriorities);
 
@@ -1644,6 +1873,7 @@ document.getElementById("btn-run-analysis").addEventListener("click", () => {
 });
 
 function renderSettings() {
+  if (!isMethodist()) return;
   migrateAndNormalize(state);
   const critList = document.getElementById("criteria-list");
   const methList = document.getElementById("methods-list");
@@ -1949,7 +2179,7 @@ document.getElementById("import-file").addEventListener("change", (e) => {
   if (await bootstrapSession()) {
     setUserDisplay(sessionStorage.getItem("ahp_login") || "");
     uiState.dashboardDate = todayYmd();
-    showApp("home");
+    showApp(defaultViewForRole());
     renderStudents();
   } else {
     showAuth();

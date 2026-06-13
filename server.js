@@ -6,7 +6,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import {
   createUser,
-  getUserPayload,
+  getUserPayloadForClient,
+  getUserRecord,
   getPasswordHash,
   saveUserPayload,
 } from "./server/store.js";
@@ -33,44 +34,65 @@ function authMiddleware(req, res, next) {
       return res.status(401).json({ error: "Неверный токен" });
     }
     req.login = login;
+    req.userRole = payload.role || null;
     next();
   } catch {
     return res.status(401).json({ error: "Сессия недействительна" });
   }
 }
 
-function signToken(login) {
-  return jwt.sign({ sub: login }, JWT_SECRET, { expiresIn: "7d" });
+function signToken(login, role) {
+  return jwt.sign({ sub: login, role }, JWT_SECRET, { expiresIn: "7d" });
 }
 
 app.post("/api/auth/register", (req, res) => {
   const login = String(req.body?.login ?? "").trim();
   const password = String(req.body?.password ?? "");
+  const role = String(req.body?.role ?? "methodist").trim();
+  const methodistLogin = String(req.body?.methodistLogin ?? "").trim();
   if (login.length < 2 || password.length < 4) {
     return res.status(400).json({ error: "Логин от 2 символов, пароль от 4." });
   }
-  const passwordHash = bcrypt.hashSync(password, 10);
-  const ok = createUser(login, passwordHash);
-  if (!ok) {
-    return res.status(409).json({ error: "Такой логин уже занят." });
+  if (role !== "methodist" && role !== "tutor") {
+    return res.status(400).json({ error: "Выберите роль: методист или репетитор." });
   }
-  const token = signToken(login);
-  res.json({ token, login });
+  const passwordHash = bcrypt.hashSync(password, 10);
+  const created = createUser(login, passwordHash, role, methodistLogin || null);
+  if (!created.ok) {
+    return res.status(409).json({ error: created.error || "Не удалось создать аккаунт." });
+  }
+  const user = getUserRecord(login);
+  const token = signToken(login, user?.role || role);
+  res.json({ token, login, role: user?.role || role, methodistLogin: user?.methodist_login || null });
 });
 
 app.post("/api/auth/login", (req, res) => {
   const login = String(req.body?.login ?? "").trim();
   const password = String(req.body?.password ?? "");
+  const role = String(req.body?.role ?? "").trim();
   const hash = getPasswordHash(login);
   if (!hash || !bcrypt.compareSync(password, hash)) {
     return res.status(401).json({ error: "Неверный логин или пароль." });
   }
-  const token = signToken(login);
-  res.json({ token, login });
+  const user = getUserRecord(login);
+  if (!user) {
+    return res.status(401).json({ error: "Пользователь не найден." });
+  }
+  if (role && role !== user.role) {
+    const roleLabel = user.role === "methodist" ? "методист" : "репетитор";
+    return res.status(403).json({ error: `Этот аккаунт зарегистрирован как ${roleLabel}. Выберите правильную роль.` });
+  }
+  const token = signToken(login, user.role);
+  res.json({
+    token,
+    login,
+    role: user.role,
+    methodistLogin: user.methodist_login || null,
+  });
 });
 
 app.get("/api/me", authMiddleware, (req, res) => {
-  const data = getUserPayload(req.login);
+  const data = getUserPayloadForClient(req.login);
   if (!data) {
     return res.status(404).json({ error: "Пользователь не найден" });
   }

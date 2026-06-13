@@ -37,7 +37,8 @@ export function buildAnalysisSnapshot({ criteria, methods, criteriaImportance, m
     student: {
       id: student.id,
       name: student.name,
-      notes: student.notes,
+      class: student.class,
+      subject: student.subject,
       lessons: (student.lessons || []).map((l) => ({
         id: l.id,
         date: l.date,

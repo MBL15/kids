@@ -34,6 +34,17 @@ function initSchema(database) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  migrateUserRoles(database);
+}
+
+function migrateUserRoles(database) {
+  const cols = database.prepare("PRAGMA table_info(users)").all();
+  if (!cols.some((c) => c.name === "role")) {
+    database.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'methodist'");
+  }
+  if (!cols.some((c) => c.name === "methodist_login")) {
+    database.exec("ALTER TABLE users ADD COLUMN methodist_login TEXT REFERENCES users(login)");
+  }
 }
 
 function migrateLegacyJson(database) {
