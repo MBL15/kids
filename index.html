@@ -284,18 +284,19 @@
                 <div class="form-row student-add-row">
                   <div class="form-field">
                     <label for="new-student-name">Имя</label>
-                    <input type="text" id="new-student-name" placeholder="Например, Иван" />
+                    <input type="text" id="new-student-name" maxlength="40" placeholder="Например, Иван" autocomplete="off" />
                   </div>
                   <div class="form-field">
                     <label for="new-student-class">Класс</label>
-                    <input type="text" id="new-student-class" placeholder="Например, 8" />
+                    <input type="text" id="new-student-class" maxlength="2" inputmode="numeric" placeholder="1–11" autocomplete="off" />
                   </div>
                   <div class="form-field">
                     <label for="new-student-subject">Предмет</label>
-                    <input type="text" id="new-student-subject" placeholder="Например, математика" />
+                    <input type="text" id="new-student-subject" maxlength="40" placeholder="Например, математика" autocomplete="off" />
                   </div>
-                  <button class="btn btn-primary" id="btn-add-student">Добавить</button>
+                  <button type="button" class="btn btn-primary" id="btn-add-student">Добавить</button>
                 </div>
+                <p id="student-add-msg" class="student-add-msg hidden" role="alert"></p>
 
                 <div class="table-wrap">
                   <table>

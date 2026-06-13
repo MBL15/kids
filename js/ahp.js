@@ -112,23 +112,33 @@ export function resizeLocalMatrices(matrices, oldSize, newSize) {
   });
 }
 
+function shrinkMethodMatrix(mat, removeIndex, oldSize) {
+  const next = createOnesMatrix(oldSize - 1);
+  let ni = 0;
+  for (let i = 0; i < oldSize; i++) {
+    if (i === removeIndex) continue;
+    let nj = 0;
+    for (let j = 0; j < oldSize; j++) {
+      if (j === removeIndex) continue;
+      next[ni][nj] = mat[i][j];
+      nj++;
+    }
+    ni++;
+  }
+  return next;
+}
+
+/** Удалить строку/столбец методики из одной локальной матрицы M×M. */
+export function removeMethodFromMatrix(matrix, removeIndex) {
+  const oldSize = matrix?.length ?? 0;
+  if (oldSize <= 1) return createOnesMatrix(0);
+  return shrinkMethodMatrix(matrix, removeIndex, oldSize);
+}
+
 export function removeMethodFromMatrices(matrices, removeIndex) {
   const oldSize = matrices[0]?.length ?? 0;
-  return matrices.map((mat) => {
-    const next = createOnesMatrix(oldSize - 1);
-    let ni = 0;
-    for (let i = 0; i < oldSize; i++) {
-      if (i === removeIndex) continue;
-      let nj = 0;
-      for (let j = 0; j < oldSize; j++) {
-        if (j === removeIndex) continue;
-        next[ni][nj] = mat[i][j];
-        nj++;
-      }
-      ni++;
-    }
-    return next;
-  });
+  if (oldSize <= 1) return matrices.map(() => createOnesMatrix(0));
+  return matrices.map((mat) => shrinkMethodMatrix(mat, removeIndex, oldSize));
 }
 
 export function isValidLocalMatrices(localMatrices, k, m) {

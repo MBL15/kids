@@ -1,44 +1,24 @@
--- ============================================================
--- Примеры SQL-запросов для диплома / отчёта
--- ============================================================
+-- Дубликат database/queries.sql (листинг 02)
 
--- 1. Список всех пользователей
-SELECT login, created_at FROM users ORDER BY created_at;
+-- Список пользователей с ролями
+SELECT login, role, methodist_login, created_at FROM users ORDER BY created_at;
 
--- 2. Количество пользователей в системе
-SELECT COUNT(*) AS user_count FROM users;
+-- Репетиторы и их методисты
+SELECT t.login AS tutor_login, t.methodist_login
+FROM users t
+WHERE t.role = 'tutor';
 
--- 3. Профиль пользователя (без пароля)
+-- Ученики методиста (имя, класс, предмет)
 SELECT
-    u.login,
-    u.created_at,
-    p.updated_at,
-    p.criteria,
-    p.methods,
-    p.students
-FROM users u
-INNER JOIN user_profiles p ON p.login = u.login
-WHERE u.login = 'demo';
+  json_extract(s.value, '$.name')    AS student_name,
+  json_extract(s.value, '$.class')   AS student_class,
+  json_extract(s.value, '$.subject') AS student_subject
+FROM user_profiles p
+CROSS JOIN json_each(p.students) AS s
+WHERE p.login = 'methodist';
 
--- 4. Количество учеников у пользователя (через json_each в SQLite 3.38+)
--- Если версия SQLite старее — считайте на стороне приложения.
-SELECT
-    u.login,
-    json_array_length(p.students) AS student_count
-FROM users u
-INNER JOIN user_profiles p ON p.login = u.login;
-
--- 5. Обновление профиля (как делает API PUT /api/me)
+-- Сохранение профиля (PUT /api/me)
 UPDATE user_profiles
-SET
-    criteria = ?,
-    methods = ?,
-    criteria_importance = ?,
-    method_scores = ?,
-    local_matrices = ?,
-    students = ?,
-    updated_at = datetime('now')
+SET criteria = ?, methods = ?, criteria_importance = ?, method_scores = ?,
+    local_matrices = ?, students = ?, updated_at = datetime('now')
 WHERE login = ?;
-
--- 6. Удаление пользователя (каскадно удалит профиль)
-DELETE FROM users WHERE login = ?;

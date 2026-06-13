@@ -1155,6 +1155,10 @@ textarea:focus {
   min-width: 120px;
 }
 
+.student-add-msg {
+  margin: -0.35rem 0 0.85rem;
+}
+
 .student-hero-meta-top {
   margin-top: 0.35rem;
   margin-bottom: 0.15rem;

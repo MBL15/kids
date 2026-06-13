@@ -7,7 +7,7 @@ import {
   getPairwiseValue,
   setPairwiseValue,
   resizeLocalMatrices,
-  removeMethodFromMatrices,
+  removeMethodFromMatrix,
   SAATY_VALUES,
   formatSaatyValue,
   parseSaatyValue,
@@ -86,6 +86,55 @@ function migrateStudentFields(student) {
   student.class = String(student.class ?? "").trim();
   student.subject = String(student.subject ?? "").trim();
   delete student.notes;
+}
+
+const STUDENT_NAME_MAX_LEN = 40;
+const STUDENT_CLASS_MAX_LEN = 2;
+const STUDENT_SUBJECT_MAX_LEN = 40;
+const RE_STUDENT_LETTERS = /^[\p{L}]+(?:[\s-][\p{L}]+)*$/u;
+const RE_STUDENT_CLASS = /^([1-9]|1[0-1])$/;
+
+function validateStudentForm(name, studentClass, subject) {
+  const trimmedName = String(name ?? "").trim();
+  const trimmedClass = String(studentClass ?? "").trim();
+  const trimmedSubject = String(subject ?? "").trim();
+
+  if (!trimmedName) return "Укажите имя ученика.";
+  if (trimmedName.length > STUDENT_NAME_MAX_LEN) {
+    return `Имя — не более ${STUDENT_NAME_MAX_LEN} символов.`;
+  }
+  if (!RE_STUDENT_LETTERS.test(trimmedName)) {
+    return "Имя: только буквы (можно пробел или дефис между словами).";
+  }
+
+  if (!trimmedClass) return "Укажите класс.";
+  if (!RE_STUDENT_CLASS.test(trimmedClass)) {
+    return "Класс: только цифры от 1 до 11.";
+  }
+
+  if (!trimmedSubject) return "Укажите предмет.";
+  if (trimmedSubject.length > STUDENT_SUBJECT_MAX_LEN) {
+    return `Предмет — не более ${STUDENT_SUBJECT_MAX_LEN} символов.`;
+  }
+  if (!RE_STUDENT_LETTERS.test(trimmedSubject)) {
+    return "Предмет: только буквы (можно пробел между словами).";
+  }
+
+  return null;
+}
+
+function setStudentFormMsg(text, type) {
+  const el = document.getElementById("student-add-msg");
+  if (!el) return;
+  if (!text) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    el.className = "student-add-msg hidden";
+    return;
+  }
+  el.className = `student-add-msg msg ${type || ""}`;
+  el.textContent = text;
+  el.classList.remove("hidden");
 }
 
 function formatStudentClassLabel(className) {
@@ -452,6 +501,16 @@ function syncAllStudentsMatrices(mutator) {
   for (const student of state.students || []) {
     ensureStudentLocalMatrices(student);
     mutator(student);
+  }
+}
+
+function purgeCriterionFromLessons(criterionId) {
+  for (const student of state.students || []) {
+    for (const lesson of student.lessons || []) {
+      if (lesson.scores && criterionId in lesson.scores) {
+        delete lesson.scores[criterionId];
+      }
+    }
   }
 }
 
@@ -1379,9 +1438,14 @@ function escapeHtml(s) {
 
 document.getElementById("btn-add-student").addEventListener("click", async () => {
   const name = document.getElementById("new-student-name").value.trim();
-  if (!name) return;
   const studentClass = document.getElementById("new-student-class").value.trim();
   const subject = document.getElementById("new-student-subject").value.trim();
+  const validationError = validateStudentForm(name, studentClass, subject);
+  if (validationError) {
+    setStudentFormMsg(validationError, "error");
+    return;
+  }
+  setStudentFormMsg("", "");
   state.students.push({
     id: uid(),
     name,
@@ -1395,6 +1459,10 @@ document.getElementById("btn-add-student").addEventListener("click", async () =>
   document.getElementById("new-student-subject").value = "";
   await persist();
   renderStudents();
+});
+
+["new-student-name", "new-student-class", "new-student-subject"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("input", () => setStudentFormMsg("", ""));
 });
 
 function setLessonFormMsg(text, type) {
@@ -1901,8 +1969,10 @@ function renderSettings() {
     btn.addEventListener("click", async () => {
       if (state.criteria.length <= 1) return;
       const ci = parseInt(btn.getAttribute("data-ci"), 10);
-      state.criteria.splice(ci, 1);
+      const removedId = state.criteria[ci]?.id;
       syncAllStudentsMatrices((st) => st.localMatrices.splice(ci, 1));
+      state.criteria.splice(ci, 1);
+      if (removedId) purgeCriterionFromLessons(removedId);
       await persist();
       renderSettings();
     });
@@ -1929,10 +1999,10 @@ function renderSettings() {
     btn.addEventListener("click", async () => {
       if (state.methods.length <= 2) return;
       const mi = parseInt(btn.getAttribute("data-mi"), 10);
-      state.methods.splice(mi, 1);
       syncAllStudentsMatrices((st) => {
-        st.localMatrices = st.localMatrices.map((mat) => removeMethodFromMatrices([mat], mi)[0]);
+        st.localMatrices = st.localMatrices.map((mat) => removeMethodFromMatrix(mat, mi));
       });
+      state.methods.splice(mi, 1);
       await persist();
       renderSettings();
     });
@@ -2111,19 +2181,19 @@ function renderPairwiseMatricesInto(host, matrices, onChange) {
 }
 
 document.getElementById("btn-add-criterion").addEventListener("click", async () => {
-  state.criteria.push({ id: uid(), name: "Новый критерий" });
   const m = state.methods.length;
   syncAllStudentsMatrices((st) => st.localMatrices.push(createOnesMatrix(m)));
+  state.criteria.push({ id: uid(), name: "Новый критерий" });
   await persist();
   renderSettings();
 });
 
 document.getElementById("btn-add-method").addEventListener("click", async () => {
   const oldM = state.methods.length;
-  state.methods.push({ id: uid(), name: "Новая методика" });
   syncAllStudentsMatrices((st) => {
     st.localMatrices = resizeLocalMatrices(st.localMatrices, oldM, oldM + 1);
   });
+  state.methods.push({ id: uid(), name: "Новая методика" });
   await persist();
   renderSettings();
 });
