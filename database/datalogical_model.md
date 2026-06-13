@@ -201,6 +201,6 @@ flowchart LR
 | `schema.sql` | DDL: создание таблиц |
 | `queries.sql` | Примеры SELECT / INSERT / UPDATE |
 | `seed_example.sql` | Тестовые данные (methodist + tutor1) |
-| `01_schema.sql`, `02_queries_examples.sql`, `03_seed_example.sql` | Копии для нумерации листингов |
+| `01_schema.sql`, `02_queries_examples.sql`, `03_seed_example.sql` | Копии для листингов 2–4 в `LISTING.md` |
 
 Схема автоматически применяется при старте сервера: `server/db.js → initSchema()`.

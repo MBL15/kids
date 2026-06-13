@@ -8,8 +8,18 @@
 | `queries.sql` | Примеры SQL-запросов |
 | `seed_example.sql` | Тестовые данные (методист + репетитор) |
 | `datalogical_model.md` | **Даталогическая модель** для пояснительной записки |
-| `01_schema.sql` … `03_seed_example.sql` | Дубликаты для нумерации листингов диплома |
-| `LISTING.md` | Готовые листинги для приложения к диплому |
+| `01_schema.sql` … `03_seed_example.sql` | Дубликаты для листингов 2–4 в `LISTING.md` |
+| `LISTING.md` | Листинги 1–8 для приложения к диплому |
+
+### Нумерация листингов (`LISTING.md`)
+
+| Листинг | Файл |
+|---------|------|
+| 1 | Логическая модель (нормализованные таблицы) |
+| 2 | `schema.sql` / `01_schema.sql` |
+| 3 | `queries.sql` / `02_queries_examples.sql` |
+| 4 | `seed_example.sql` / `03_seed_example.sql` |
+| 5–8 | Код приложения (`store.js`, `server.js`, `ahp.js`) |
 
 ## База данных
 
