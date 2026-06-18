@@ -1,5 +1,5 @@
 /**
- * Радарные диаграммы. Chart.js подключается лениво — если библиотека не загрузится,
+ * Радарные диаграммы. Библиотека графиков подключается лениво — если она не загрузится,
  * остальной интерфейс (кнопки, вход) продолжает работать.
  */
 
@@ -73,7 +73,7 @@ export async function updateStudentRadarChart(canvas, { criteria, lessons }) {
   try {
     Chart = await getChart();
   } catch (e) {
-    console.error("Не удалось загрузить Chart.js (радар успеваемости):", e);
+    console.error("Не удалось загрузить библиотеку графиков (радар успеваемости):", e);
     return;
   }
 
@@ -167,7 +167,7 @@ export async function updateMethodologyPriorityRadar(canvas, { methods, globalPr
   try {
     Chart = await getChart();
   } catch (e) {
-    console.error("Не удалось загрузить Chart.js (радар методик):", e);
+    console.error("Не удалось загрузить библиотеку графиков (радар методик):", e);
     return;
   }
 

@@ -38,8 +38,6 @@ function defaultViewForRole() {
   return isMethodist() ? "students" : "home";
 }
 
-let authSelectedRole = null;
-
 function applyRoleUi() {
   const role = state.userRole || "tutor";
 
@@ -162,12 +160,6 @@ function guardViewForRole(view) {
   return view;
 }
 
-function hideAuthSteps() {
-  document.getElementById("auth-step-role")?.classList.add("hidden");
-  document.getElementById("auth-step-login")?.classList.add("hidden");
-  document.getElementById("auth-step-register")?.classList.add("hidden");
-}
-
 function setAuthMsg(html, type, step = "login") {
   const id = step === "register" ? "auth-register-msg" : "auth-login-msg";
   const el = document.getElementById(id);
@@ -182,48 +174,47 @@ function setAuthMsg(html, type, step = "login") {
   el.innerHTML = html;
 }
 
-function showAuthRoleStep() {
-  authSelectedRole = null;
-  hideAuthSteps();
-  document.getElementById("auth-step-role")?.classList.remove("hidden");
+function clearAuthMessages() {
   setAuthMsg("", "", "login");
   setAuthMsg("", "", "register");
 }
 
-function updateAuthStepCopy(role) {
-  const isTutorRole = role === "tutor";
-  const roleLabel = isTutorRole ? "репетитора" : "методиста";
-
-  document.getElementById("auth-login-title").textContent = isTutorRole ? "Вход — репетитор" : "Вход — методист";
-  document.getElementById("auth-login-hint").textContent = `Введите логин и пароль аккаунта ${roleLabel}.`;
-
-  document.getElementById("auth-register-title").textContent = isTutorRole ? "Регистрация — репетитор" : "Регистрация — методист";
-  document.getElementById("auth-register-hint").textContent = isTutorRole
-    ? "Укажите логин методиста, затем придумайте свой логин и пароль."
-    : "Придумайте логин и пароль для нового аккаунта методиста.";
-
-  document.getElementById("auth-register-methodist-field")?.classList.toggle("hidden", !isTutorRole);
+function setAuthTab(tab) {
+  const isLogin = tab === "login";
+  document.getElementById("auth-tab-login")?.classList.toggle("active", isLogin);
+  document.getElementById("auth-tab-register")?.classList.toggle("active", !isLogin);
+  document.getElementById("auth-tab-login")?.setAttribute("aria-selected", String(isLogin));
+  document.getElementById("auth-tab-register")?.setAttribute("aria-selected", String(!isLogin));
+  document.getElementById("auth-panel-login")?.classList.toggle("hidden", !isLogin);
+  document.getElementById("auth-panel-register")?.classList.toggle("hidden", isLogin);
+  clearAuthMessages();
+  if (isLogin) {
+    document.getElementById("auth-login-user")?.focus();
+  } else {
+    syncRegisterRoleUi();
+    document.getElementById("auth-register-user")?.focus();
+  }
 }
 
-function showAuthLoginStep(role) {
-  authSelectedRole = role;
-  hideAuthSteps();
-  updateAuthStepCopy(role);
-  document.getElementById("auth-step-login")?.classList.remove("hidden");
-  setAuthMsg("", "", "login");
-  document.getElementById("auth-login-user")?.focus();
+function getRegisterRole() {
+  return document.querySelector('input[name="auth-register-role"]:checked')?.value || "methodist";
 }
 
-function showAuthRegisterStep(role) {
-  authSelectedRole = role;
-  hideAuthSteps();
-  updateAuthStepCopy(role);
-  document.getElementById("auth-step-register")?.classList.remove("hidden");
-  setAuthMsg("", "", "register");
-  const focusEl = role === "tutor"
-    ? document.getElementById("auth-register-methodist")
-    : document.getElementById("auth-register-user");
-  focusEl?.focus();
+function syncRegisterRoleUi() {
+  const isTutor = getRegisterRole() === "tutor";
+  document.getElementById("auth-register-methodist-field")?.classList.toggle("hidden", !isTutor);
+}
+
+function setAuthSubmitting(formId, submitting) {
+  const form = document.getElementById(formId);
+  if (!form) return;
+  form.querySelectorAll("input, button, select, textarea").forEach((el) => {
+    el.disabled = submitting;
+  });
+}
+
+function normalizeAuthLogin(value) {
+  return String(value ?? "").trim();
 }
 
 /** Приводит к шкале 2–5; значения 1–10 (старый формат) переводит линейно. */
@@ -351,8 +342,8 @@ const HELP_CONTENT = {
       <h4>Шаг 3.3. Расчёт весов критериев</h4>
       <p>Из матрицы попарных сравнений вычисляются веса — насколько каждый критерий важен для улучшения. Сумма весов = 100%. Чем выше дефицит, тем больше вес.</p>
 
-      <h4>Шаг 3.4. Проверка согласованности (CR)</h4>
-      <p>Система проверяет, нет ли противоречий в сравнениях. Норма: <strong>CR &lt; 0,1</strong>. Если CR ≥ 0,1 — рекомендация может быть ненадёжной.</p>
+      <h4>Шаг 3.4. Проверка согласованности (КС)</h4>
+      <p>Система проверяет, нет ли противоречий в сравнениях. Норма: <strong>КС &lt; 0,1</strong>. Если КС ≥ 0,1 — рекомендация может быть ненадёжной.</p>
 
       <h4>Шаг 3.5. Локальные приоритеты методик</h4>
       <p>Для каждого критерия система берёт <strong>заполненную вами</strong> матрицу сравнения методик и вычисляет, какая методика лучше для этого критерия.</p>
@@ -368,7 +359,7 @@ const HELP_CONTENT = {
         <thead><tr><th>Блок</th><th>Что показывает</th></tr></thead>
         <tbody>
           <tr><td>Веса критериев</td><td>Насколько важно улучшать каждый критерий (%)</td></tr>
-          <tr><td>CR (согласованность)</td><td>✅ если всё хорошо, ⚠️ если есть противоречия</td></tr>
+          <tr><td>Коэффициент согласованности</td><td>✅ если всё хорошо, ⚠️ если есть противоречия</td></tr>
           <tr><td>Локальные приоритеты</td><td>Ранжирование методик по каждому критерию</td></tr>
           <tr><td>Глобальные приоритеты</td><td>Итоговый рейтинг методик</td></tr>
           <tr><td>Рекомендация</td><td>Какая методика подходит лучше всего</td></tr>
@@ -403,7 +394,7 @@ const HELP_CONTENT = {
       <h3>Кто задаёт критерии и методики?</h3>
       <p>Только методист, вкладка «Правила». Репетитор использует их при оценке и анализе.</p>
       <h3>Где хранятся данные?</h3>
-      <p>На сервере в SQLite (<code>data/app.db</code>).</p>
+      <p>На сервере в файле базы данных (<code>data/app.db</code>).</p>
       <h3>Какая шкала оценок?</h3>
       <p>На уроках — 2–5; при анализе — 1–10. Дефицит = 10 − оценка + 1.</p>
       <h3>Когда появится рекомендация?</h3>
@@ -1072,7 +1063,7 @@ function renderDashboard() {
 function showAuth() {
   document.getElementById("app-shell")?.classList.add("hidden");
   document.getElementById("view-auth")?.classList.remove("hidden");
-  showAuthRoleStep();
+  setAuthTab("login");
 }
 
 function showApp(view, options = {}) {
@@ -1105,51 +1096,62 @@ function showApp(view, options = {}) {
 
 function readLoginForm() {
   return {
-    login: document.getElementById("auth-login-user")?.value.trim() || "",
+    login: normalizeAuthLogin(document.getElementById("auth-login-user")?.value),
     password: document.getElementById("auth-login-pass")?.value || "",
-    role: authSelectedRole || sessionStorage.getItem(ROLE_KEY) || "methodist",
   };
 }
 
 function readRegisterForm() {
   return {
-    login: document.getElementById("auth-register-user")?.value.trim() || "",
+    login: normalizeAuthLogin(document.getElementById("auth-register-user")?.value),
     password: document.getElementById("auth-register-pass")?.value || "",
-    methodistLogin: document.getElementById("auth-register-methodist")?.value.trim() || "",
-    role: authSelectedRole || sessionStorage.getItem(ROLE_KEY) || "methodist",
+    password2: document.getElementById("auth-register-pass2")?.value || "",
+    methodistLogin: normalizeAuthLogin(document.getElementById("auth-register-methodist")?.value),
+    role: getRegisterRole(),
   };
 }
 
 function validateLoginForm(form) {
-  if (form.login.length < 2) return "Логин должен быть не короче 2 символов.";
+  if (!form.login) return "Введите учётное имя.";
+  if (form.login.length < 2) return "Учётное имя должно быть не короче 2 символов.";
+  if (!form.password) return "Введите пароль.";
   if (form.password.length < 4) return "Пароль должен быть не короче 4 символов.";
   return null;
 }
 
 function validateRegisterForm(form) {
+  if (form.role === "tutor" && !form.methodistLogin) {
+    return "Укажите учётное имя методиста.";
+  }
   if (form.role === "tutor" && form.methodistLogin.length < 2) {
-    return "Укажите логин методиста (от 2 символов). Сначала зарегистрируйте методиста.";
+    return "Учётное имя методиста — не короче 2 символов.";
   }
-  if (form.login.length < 2) {
-    return form.role === "tutor"
-      ? "Заполните «Ваш логин» — это логин репетитора, не методиста."
-      : "Логин должен быть не короче 2 символов.";
-  }
+  if (!form.login) return "Придумайте учётное имя.";
+  if (form.login.length < 2) return "Учётное имя должно быть не короче 2 символов.";
+  if (!form.password) return "Введите пароль.";
   if (form.password.length < 4) return "Пароль должен быть не короче 4 символов.";
+  if (form.password !== form.password2) return "Пароли не совпадают.";
   return null;
 }
 
-async function completeAuth(data, login) {
+async function completeAuth(data, login, step = "login") {
   sessionStorage.setItem(TOKEN_KEY, data.token);
   sessionStorage.setItem("ahp_login", login);
-  sessionStorage.setItem(ROLE_KEY, data.role || authSelectedRole || "methodist");
+  sessionStorage.setItem(ROLE_KEY, data.role || "methodist");
   if (data.methodistLogin) sessionStorage.setItem(METHODIST_KEY, data.methodistLogin);
   else sessionStorage.removeItem(METHODIST_KEY);
+
   const ok = await bootstrapSession();
   if (!ok) {
-    setAuthMsg("Не удалось загрузить данные. Попробуйте войти снова.", "error", "login");
+    sessionStorage.removeItem(TOKEN_KEY);
+    setAuthMsg(
+      "Вход выполнен, но не удалось загрузить данные профиля. Проверьте, что у методиста есть профиль, или обратитесь к администратору.",
+      "error",
+      step
+    );
     return false;
   }
+
   setUserDisplay(login);
   uiState.dashboardDate = todayYmd();
   showApp(defaultViewForRole());
@@ -1157,72 +1159,77 @@ async function completeAuth(data, login) {
   return true;
 }
 
-document.querySelectorAll("[data-auth-role]").forEach((btn) => {
-  btn.addEventListener("click", () => showAuthLoginStep(btn.getAttribute("data-auth-role")));
-});
-
-document.getElementById("btn-auth-back-login")?.addEventListener("click", showAuthRoleStep);
-document.getElementById("btn-auth-back-register")?.addEventListener("click", showAuthRoleStep);
-
-document.getElementById("btn-go-register")?.addEventListener("click", () => {
-  if (!authSelectedRole) {
-    showAuthRoleStep();
-    return;
-  }
-  showAuthRegisterStep(authSelectedRole);
-});
-
-document.getElementById("btn-go-login")?.addEventListener("click", () => {
-  if (!authSelectedRole) {
-    showAuthRoleStep();
-    return;
-  }
-  showAuthLoginStep(authSelectedRole);
-});
-
-document.getElementById("btn-register").addEventListener("click", async () => {
-  const form = readRegisterForm();
-  const validationError = validateRegisterForm(form);
-  if (validationError) {
-    setAuthMsg(validationError, "error", "register");
-    return;
-  }
-  const res = await fetch("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      login: form.login,
-      password: form.password,
-      role: form.role,
-      methodistLogin: form.methodistLogin,
-    }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    setAuthMsg(data.error || "Ошибка регистрации", "error", "register");
-    return;
-  }
-  await completeAuth(data, form.login);
-});
-
-document.getElementById("btn-login").addEventListener("click", async () => {
+async function submitLogin(event) {
+  event?.preventDefault();
   const form = readLoginForm();
   const validationError = validateLoginForm(form);
   if (validationError) {
     setAuthMsg(validationError, "error", "login");
     return;
   }
-  const res = await fetch("/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ login: form.login, password: form.password, role: form.role }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    setAuthMsg(data.error || "Ошибка входа", "error", "login");
+
+  setAuthSubmitting("auth-login-form", true);
+  setAuthMsg("", "", "login");
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ login: form.login, password: form.password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAuthMsg(data.error || "Ошибка входа", "error", "login");
+      return;
+    }
+    await completeAuth(data, form.login, "login");
+  } catch {
+    setAuthMsg("Нет связи с сервером. Запустите приложение и попробуйте снова.", "error", "login");
+  } finally {
+    setAuthSubmitting("auth-login-form", false);
+  }
+}
+
+async function submitRegister(event) {
+  event?.preventDefault();
+  const form = readRegisterForm();
+  const validationError = validateRegisterForm(form);
+  if (validationError) {
+    setAuthMsg(validationError, "error", "register");
     return;
   }
-  await completeAuth(data, form.login);
+
+  setAuthSubmitting("auth-register-form", true);
+  setAuthMsg("", "", "register");
+  try {
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        login: form.login,
+        password: form.password,
+        role: form.role,
+        methodistLogin: form.methodistLogin,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setAuthMsg(data.error || "Ошибка регистрации", "error", "register");
+      return;
+    }
+    await completeAuth(data, form.login, "register");
+  } catch {
+    setAuthMsg("Нет связи с сервером. Запустите приложение и попробуйте снова.", "error", "register");
+  } finally {
+    setAuthSubmitting("auth-register-form", false);
+  }
+}
+
+document.getElementById("auth-tab-login")?.addEventListener("click", () => setAuthTab("login"));
+document.getElementById("auth-tab-register")?.addEventListener("click", () => setAuthTab("register"));
+document.getElementById("auth-login-form")?.addEventListener("submit", submitLogin);
+document.getElementById("auth-register-form")?.addEventListener("submit", submitRegister);
+document.querySelectorAll('input[name="auth-register-role"]').forEach((input) => {
+  input.addEventListener("change", syncRegisterRoleUi);
 });
 
 document.getElementById("btn-logout").addEventListener("click", () => {
@@ -1784,7 +1791,7 @@ function crBadgeHtml(cr, consistent) {
   const cls = consistent ? "cr-ok" : "cr-bad";
   const icon = consistent ? "✅" : "⚠️";
   const text = consistent ? "согласовано" : "противоречия";
-  return `<span class="cr-badge ${cls}">${icon} CR ${cr.toFixed(3)} — ${text}</span>`;
+  return `<span class="cr-badge ${cls}">${icon} КС ${cr.toFixed(3)} — ${text}</span>`;
 }
 
 function renderAnalysisResult(student) {
@@ -1890,7 +1897,7 @@ function renderAnalysisResult(student) {
     </div>
 
     <div class="analysis-card">
-      <h3 class="analysis-card-title">Согласованность (CR)</h3>
+      <h3 class="analysis-card-title">Согласованность (коэффициент КС)</h3>
       <p class="form-hint">Критерии: ${crBadgeHtml(criteriaCR, criteriaConsistent)}</p>
       <p class="diagram-ref">Матрицы методик по критериям:</p>
       <p class="diagram-ref">${localCrHtml}</p>
@@ -2215,7 +2222,7 @@ document.getElementById("btn-export-json").addEventListener("click", () => {
   );
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "ahp-settings.json";
+  a.download = "nastroiki-pravil.json";
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -2238,7 +2245,7 @@ document.getElementById("import-file").addEventListener("change", (e) => {
       await persist();
       renderSettings();
     } catch (err) {
-      alert("Ошибка импорта: " + err.message);
+      alert("Ошибка загрузки файла: " + err.message);
     }
   };
   r.readAsText(f);

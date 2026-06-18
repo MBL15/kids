@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Методика занятий — AHP</title>
+    <title>Методика занятий — МАИ</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -31,77 +31,82 @@
             </svg>
           </span>
           <div>
-            <h1>Методика AHP</h1>
-            <p class="auth-subtitle">Подбор методики преподавания</p>
+            <h1>Методика занятий</h1>
+            <p class="auth-subtitle">Подбор методики преподавания (МАИ)</p>
           </div>
         </div>
 
-        <div id="auth-step-role">
-          <h2>Выберите роль</h2>
-          <p class="flow-hint">Методист настраивает правила и матрицы. Репетитор ведёт уроки и запускает анализ.</p>
-          <div class="auth-role-grid">
-            <button type="button" class="auth-role-card" data-auth-role="methodist">
-              <span class="auth-role-title">Методист</span>
-              <span class="auth-role-desc">Критерии, методики, попарное сравнение для учеников</span>
-            </button>
-            <button type="button" class="auth-role-card" data-auth-role="tutor">
-              <span class="auth-role-title">Репетитор</span>
-              <span class="auth-role-desc">Оценки после уроков, расписание, анализ и рекомендация</span>
-            </button>
-          </div>
+        <div class="auth-tabs" role="tablist" aria-label="Вход или регистрация">
+          <button type="button" class="auth-tab active" id="auth-tab-login" role="tab" aria-selected="true" aria-controls="auth-panel-login">
+            Вход
+          </button>
+          <button type="button" class="auth-tab" id="auth-tab-register" role="tab" aria-selected="false" aria-controls="auth-panel-register">
+            Регистрация
+          </button>
         </div>
 
-        <div id="auth-step-login" class="hidden">
-          <button type="button" class="btn btn-ghost btn-sm auth-back-btn" id="btn-auth-back-login">← Выбрать другую роль</button>
-          <h2 id="auth-login-title">Вход</h2>
-          <p class="flow-hint" id="auth-login-hint">Введите логин и пароль.</p>
+        <div id="auth-panel-login" role="tabpanel" aria-labelledby="auth-tab-login">
+          <p class="flow-hint">Введите учётное имя и пароль. Система сама определит вашу роль.</p>
           <div id="auth-login-msg"></div>
-          <div class="form-stack auth-form-stack">
+          <form class="form-stack auth-form-stack" id="auth-login-form" novalidate>
             <div>
-              <label for="auth-login-user">Логин</label>
-              <input type="text" id="auth-login-user" autocomplete="username" placeholder="Ваш логин" />
+              <label for="auth-login-user">Учётное имя</label>
+              <input type="text" id="auth-login-user" name="login" autocomplete="username" placeholder="Ваше учётное имя" required />
             </div>
             <div>
               <label for="auth-login-pass">Пароль</label>
-              <input type="password" id="auth-login-pass" autocomplete="current-password" placeholder="••••••••" />
+              <input type="password" id="auth-login-pass" name="password" autocomplete="current-password" placeholder="••••••••" required />
             </div>
-          </div>
-          <div class="auth-actions auth-actions-single">
-            <button type="button" class="btn btn-primary btn-block" id="btn-login">Войти</button>
-          </div>
-          <p class="auth-switch">
-            Нет аккаунта?
-            <button type="button" class="auth-switch-link" id="btn-go-register">Зарегистрироваться</button>
-          </p>
+            <div class="auth-actions auth-actions-single">
+              <button type="submit" class="btn btn-primary btn-block" id="btn-login">Войти</button>
+            </div>
+          </form>
         </div>
 
-        <div id="auth-step-register" class="hidden">
-          <button type="button" class="btn btn-ghost btn-sm auth-back-btn" id="btn-auth-back-register">← Выбрать другую роль</button>
-          <h2 id="auth-register-title">Регистрация</h2>
-          <p class="flow-hint" id="auth-register-hint">Создайте новый аккаунт.</p>
+        <div id="auth-panel-register" class="hidden" role="tabpanel" aria-labelledby="auth-tab-register">
+          <p class="flow-hint">Создайте учётную запись. Данные хранятся на сервере.</p>
           <div id="auth-register-msg"></div>
-          <div class="form-stack auth-form-stack">
+          <form class="form-stack auth-form-stack" id="auth-register-form" novalidate>
+            <fieldset class="auth-role-fieldset">
+              <legend>Роль</legend>
+              <div class="auth-role-segment">
+                <label class="auth-role-option">
+                  <input type="radio" name="auth-register-role" value="methodist" checked />
+                  <span class="auth-role-option-body">
+                    <span class="auth-role-title">Методист</span>
+                    <span class="auth-role-desc">Критерии, методики, матрицы</span>
+                  </span>
+                </label>
+                <label class="auth-role-option">
+                  <input type="radio" name="auth-register-role" value="tutor" />
+                  <span class="auth-role-option-body">
+                    <span class="auth-role-title">Репетитор</span>
+                    <span class="auth-role-desc">Уроки, оценки, анализ</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
             <div id="auth-register-methodist-field" class="hidden">
-              <label for="auth-register-methodist">Логин методиста <span class="req">*</span></label>
-              <input type="text" id="auth-register-methodist" autocomplete="off" placeholder="Например, methodist" />
-              <p class="field-hint">Сначала должен быть зарегистрирован аккаунт методиста с этим логином.</p>
+              <label for="auth-register-methodist">Учётное имя методиста <span class="req">*</span></label>
+              <input type="text" id="auth-register-methodist" name="methodistLogin" autocomplete="off" placeholder="Учётное имя уже зарегистрированного методиста" />
+              <p class="field-hint">Сначала должна существовать учётная запись методиста с этим именем.</p>
             </div>
             <div>
-              <label for="auth-register-user">Ваш логин <span class="req">*</span></label>
-              <input type="text" id="auth-register-user" autocomplete="username" placeholder="Придумайте логин от 2 символов" />
+              <label for="auth-register-user">Ваше учётное имя <span class="req">*</span></label>
+              <input type="text" id="auth-register-user" name="login" autocomplete="username" placeholder="От 2 символов" required />
             </div>
             <div>
               <label for="auth-register-pass">Пароль <span class="req">*</span></label>
-              <input type="password" id="auth-register-pass" autocomplete="new-password" placeholder="Не короче 4 символов" />
+              <input type="password" id="auth-register-pass" name="password" autocomplete="new-password" placeholder="Не короче 4 символов" required />
             </div>
-          </div>
-          <div class="auth-actions auth-actions-single">
-            <button type="button" class="btn btn-primary btn-block" id="btn-register">Создать аккаунт</button>
-          </div>
-          <p class="auth-switch">
-            Уже есть аккаунт?
-            <button type="button" class="auth-switch-link" id="btn-go-login">Войти</button>
-          </p>
+            <div>
+              <label for="auth-register-pass2">Повторите пароль <span class="req">*</span></label>
+              <input type="password" id="auth-register-pass2" name="password2" autocomplete="new-password" placeholder="Ещё раз" required />
+            </div>
+            <div class="auth-actions auth-actions-single">
+              <button type="submit" class="btn btn-primary btn-block" id="btn-register">Создать учётную запись</button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
@@ -117,7 +122,7 @@
                 <path d="M8 14h12M14 8v12" stroke="#fff" stroke-width="2" stroke-linecap="round" />
               </svg>
             </span>
-            <span class="brand-name">AHP</span>
+            <span class="brand-name">МАИ</span>
           </button>
         </div>
 
@@ -350,10 +355,10 @@
                   <h3 class="section-title">Этап 2. Матрицы сравнения методик</h3>
                   <p class="diagram-ref pairwise-section-lead">
                     Один раз для ученика. В каждой матрице заполните ячейки <strong>выше диагонали</strong> — насколько методика в строке важнее методики в столбце.
-                    <a href="#" class="pairwise-scale-link" id="btn-open-saaty-scale">Шкала Saaty</a>
+                    <a href="#" class="pairwise-scale-link" id="btn-open-saaty-scale">Шкала сравнений</a>
                   </p>
                   <details class="pairwise-scale-help" id="pairwise-scale-help">
-                    <summary>Шкала сравнений (Saaty)</summary>
+                    <summary>Шкала парных сравнений</summary>
                     <table class="help-doc-table pairwise-scale-table">
                       <thead><tr><th>Значение</th><th>Смысл</th></tr></thead>
                       <tbody>
@@ -489,7 +494,7 @@
                 <div id="analysis-empty" class="analysis-empty">
                   <div class="analysis-empty-icon" aria-hidden="true">📊</div>
                   <p class="analysis-empty-title">Результат появится здесь</p>
-                  <p class="analysis-empty-desc">После анализа: рекомендация, веса критериев, CR, локальные и глобальные приоритеты</p>
+                  <p class="analysis-empty-desc">После анализа: рекомендация, веса критериев, коэффициент согласованности, локальные и глобальные приоритеты</p>
                 </div>
 
                 <div id="analysis-result" class="analysis-result hidden"></div>
@@ -514,9 +519,9 @@
                 <button type="button" class="btn btn-secondary" id="btn-add-method">+ Методика</button>
 
                 <div class="form-row" style="margin-top: 1.25rem">
-                  <button class="btn btn-secondary" id="btn-export-json">Экспорт JSON</button>
-                  <button class="btn btn-secondary" id="btn-import-json">Импорт из файла</button>
-                  <input type="file" id="import-file" accept="application/json" class="hidden" />
+                  <button class="btn btn-secondary" id="btn-export-json">Экспорт настроек</button>
+                  <button class="btn btn-secondary" id="btn-import-json">Загрузить из файла</button>
+                  <input type="file" id="import-file" accept="application/json,.json" class="hidden" />
                 </div>
               </div>
             </section>

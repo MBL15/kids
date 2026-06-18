@@ -22,8 +22,8 @@ export const FUNCTIONAL_PIPELINE_OVERVIEW = [
   },
   {
     id: "3.4",
-    title: "Проверка согласованности (CR)",
-    detail: "CR < 0.1 — согласованность достигнута; иначе рекомендация может быть ненадёжной.",
+    title: "Проверка согласованности (КС)",
+    detail: "КС < 0,1 — согласованность достигнута; иначе рекомендация может быть ненадёжной.",
   },
   {
     id: "3.5",
@@ -84,9 +84,9 @@ export function runFunctionalScoreAnalysis(ctx) {
 
   steps.push({
     id: "3.4",
-    title: "Проверка согласованности (CR)",
+    title: "Проверка согласованности (КС)",
     input: "Матрица критериев.",
-    output: `CR = ${result.criteriaCR.toFixed(3)} (${result.criteriaConsistent ? "согласовано" : "есть противоречия"}).`,
+    output: `КС = ${result.criteriaCR.toFixed(3)} (${result.criteriaConsistent ? "согласовано" : "есть противоречия"}).`,
     data: { criteriaCR: result.criteriaCR, criteriaConsistent: result.criteriaConsistent },
   });
 

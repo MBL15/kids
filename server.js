@@ -31,7 +31,7 @@ function authMiddleware(req, res, next) {
     const payload = jwt.verify(token, JWT_SECRET);
     const login = payload.sub;
     if (!login || typeof login !== "string") {
-      return res.status(401).json({ error: "Неверный токен" });
+      return res.status(401).json({ error: "Недействительная сессия" });
     }
     req.login = login;
     req.userRole = payload.role || null;
@@ -51,7 +51,7 @@ app.post("/api/auth/register", (req, res) => {
   const role = String(req.body?.role ?? "methodist").trim();
   const methodistLogin = String(req.body?.methodistLogin ?? "").trim();
   if (login.length < 2 || password.length < 4) {
-    return res.status(400).json({ error: "Логин от 2 символов, пароль от 4." });
+    return res.status(400).json({ error: "Учётное имя от 2 символов, пароль от 4." });
   }
   if (role !== "methodist" && role !== "tutor") {
     return res.status(400).json({ error: "Выберите роль: методист или репетитор." });
@@ -59,7 +59,7 @@ app.post("/api/auth/register", (req, res) => {
   const passwordHash = bcrypt.hashSync(password, 10);
   const created = createUser(login, passwordHash, role, methodistLogin || null);
   if (!created.ok) {
-    return res.status(409).json({ error: created.error || "Не удалось создать аккаунт." });
+    return res.status(409).json({ error: created.error || "Не удалось создать учётную запись." });
   }
   const user = getUserRecord(login);
   const token = signToken(login, user?.role || role);
@@ -69,24 +69,26 @@ app.post("/api/auth/register", (req, res) => {
 app.post("/api/auth/login", (req, res) => {
   const login = String(req.body?.login ?? "").trim();
   const password = String(req.body?.password ?? "");
-  const role = String(req.body?.role ?? "").trim();
+  if (login.length < 2) {
+    return res.status(400).json({ error: "Введите учётное имя." });
+  }
+  if (password.length < 4) {
+    return res.status(400).json({ error: "Введите пароль." });
+  }
   const hash = getPasswordHash(login);
   if (!hash || !bcrypt.compareSync(password, hash)) {
-    return res.status(401).json({ error: "Неверный логин или пароль." });
+    return res.status(401).json({ error: "Неверное учётное имя или пароль." });
   }
   const user = getUserRecord(login);
   if (!user) {
     return res.status(401).json({ error: "Пользователь не найден." });
   }
-  if (role && role !== user.role) {
-    const roleLabel = user.role === "methodist" ? "методист" : "репетитор";
-    return res.status(403).json({ error: `Этот аккаунт зарегистрирован как ${roleLabel}. Выберите правильную роль.` });
-  }
-  const token = signToken(login, user.role);
+  const role = user.role === "tutor" ? "tutor" : "methodist";
+  const token = signToken(login, role);
   res.json({
     token,
     login,
-    role: user.role,
+    role,
     methodistLogin: user.methodist_login || null,
   });
 });
@@ -106,10 +108,10 @@ app.put("/api/me", authMiddleware, (req, res) => {
   }
   const { criteria, methods, criteriaImportance, methodScores, localMatrices, students } = body;
   if (!Array.isArray(criteria) || !Array.isArray(methods) || !Array.isArray(students)) {
-    return res.status(400).json({ error: "Ожидаются criteria, methods, students (массивы)" });
+    return res.status(400).json({ error: "Ожидаются массивы: критерии, методики, ученики." });
   }
   if (!Array.isArray(criteriaImportance) || !Array.isArray(methodScores)) {
-    return res.status(400).json({ error: "Ожидаются criteriaImportance и methodScores" });
+    return res.status(400).json({ error: "Неверный формат данных профиля." });
   }
   const payload = { criteria, methods, criteriaImportance, methodScores, students };
   if (Array.isArray(localMatrices)) payload.localMatrices = localMatrices;

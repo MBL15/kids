@@ -62,17 +62,44 @@ function dataSourceLogin(user) {
   return user.login;
 }
 
+function ensureMethodistProfile(methodistLogin) {
+  const existing = getUserPayload(methodistLogin);
+  if (existing) return existing;
+
+  const user = getUserRecord(methodistLogin);
+  if (!user || (user.role && user.role !== "methodist")) return null;
+
+  const db = getDb();
+  const defaults = createDefaultUserState();
+  db.prepare(
+    `
+    INSERT INTO user_profiles (
+      login, criteria, methods, criteria_importance, method_scores, students
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `
+  ).run(
+    methodistLogin,
+    JSON.stringify(defaults.criteria),
+    JSON.stringify(defaults.methods),
+    JSON.stringify(defaults.criteriaImportance),
+    JSON.stringify(defaults.methodScores),
+    JSON.stringify(defaults.students)
+  );
+
+  return getUserPayload(methodistLogin);
+}
+
 export function getUserPayloadForClient(login) {
   const user = getUserRecord(login);
   if (!user) return null;
 
   const sourceLogin = dataSourceLogin(user);
-  const payload = getUserPayload(sourceLogin);
+  const payload = ensureMethodistProfile(sourceLogin);
   if (!payload) return null;
 
   return {
     ...payload,
-    role: user.role || "methodist",
+    role: user.role === "tutor" ? "tutor" : "methodist",
     methodistLogin: user.methodist_login || null,
     login: user.login,
   };
@@ -117,7 +144,7 @@ function mergeTutorStudents(methodistPayload, tutorPayload) {
 export function createUser(login, passwordHash, role = "methodist", methodistLogin = null) {
   const db = getDb();
   const exists = db.prepare("SELECT 1 FROM users WHERE login = ?").get(login);
-  if (exists) return { ok: false, error: "Такой логин уже занят." };
+  if (exists) return { ok: false, error: "Такое учётное имя уже занято." };
 
   const normalizedRole = role === "tutor" ? "tutor" : "methodist";
   let linkedMethodist = null;
@@ -125,11 +152,11 @@ export function createUser(login, passwordHash, role = "methodist", methodistLog
   if (normalizedRole === "tutor") {
     const methodistLoginTrimmed = String(methodistLogin ?? "").trim();
     if (!methodistLoginTrimmed) {
-      return { ok: false, error: "Укажите логин методиста." };
+      return { ok: false, error: "Укажите учётное имя методиста." };
     }
     const methodist = getUserRecord(methodistLoginTrimmed);
     if (!methodist || (methodist.role && methodist.role !== "methodist")) {
-      return { ok: false, error: "Методист с таким логином не найден. Сначала зарегистрируйте методиста." };
+      return { ok: false, error: "Методист с таким учётным именем не найден. Сначала зарегистрируйте методиста." };
     }
     linkedMethodist = methodistLoginTrimmed;
   }
